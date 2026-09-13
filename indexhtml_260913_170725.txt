@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GlobalCall</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; font-family: -apple-system, sans-serif; background: #0a0a0f; color: #fff; overflow: hidden; }
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+  .screen.active { display: flex; }
+  #home { background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 70%); }
+  .logo { font-size: 42px; font-weight: 800; background: linear-gradient(135deg, #667eea, #f093fb, #f5576c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+  .tagline { color: #888; font-size: 15px; margin-bottom: 40px; }
+  .balance-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px 32px; margin-bottom: 24px; min-width: 200px; }
+  .balance-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+  .balance-value { font-size: 32px; font-weight: 700; margin-top: 4px; color: #4ade80; }
+  .balance-value.low { color: #f87171; }
+  .btn { border: none; border-radius: 50px; padding: 16px 48px; font-size: 17px; font-weight: 600; cursor: pointer; width: 100%; max-width: 320px; margin: 8px 0; transition: all 0.2s; }
+  .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; box-shadow: 0 8px 24px rgba(102,126,234,0.4); }
+  .btn-secondary { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15); }
+  #searching { background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0f 70%); }
+  .radar { width: 160px; height: 160px; border-radius: 50%; border: 2px solid rgba(102,126,234,0.3); position: relative; margin-bottom: 32px; }
+  .radar::after { content: ''; position: absolute; inset: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); animation: pulse 2s ease-out infinite; }
+  @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+  .searching-text { font-size: 18px; color: #ccc; margin-bottom: 32px; }
+  #call { padding: 0; justify-content: flex-start; }
+  .video-container { position: absolute; inset: 0; background: #000; }
+  #remoteVideo { width: 100%; height: 100%; object-fit: cover; background: #111; }
+  #localVideo { position: absolute; top: 16px; right: 16px; width: 110px; height: 150px; object-fit: cover; border-radius: 12px; border: 2px solid rgba(255,255,255,0.2); z-index: 10; background: #222; }
+  .call-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
+  .call-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .timer-badge { background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 50px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .timer-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
+  .call-controls { display: flex; justify-content: center; gap: 16px; pointer-events: auto; padding-bottom: 16px; }
+  .ctrl-btn { width: 60px; height: 60px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .ctrl-btn.end { background: #ef4444; }
+  .ctrl-btn.muted { background: #f59e0b; }
+  .warning-banner { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); background: rgba(245,158,11,0.95); color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 600; font-size: 14px; z-index: 20; display: none; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
+  .modal-bg.active { display: flex; }
+  .modal { background: #15151f; border: 1px solid rgba(255,255,255,0.1); border-radius: 24px; padding: 32px 24px; max-width: 400px; width: 100%; text-align: center; }
+  .modal h2 { font-size: 24px; margin-bottom: 8px; }
+  .modal p { color: #888; font-size: 14px; margin-bottom: 24px; }
+  .pack { display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 20px; margin-bottom: 12px; cursor: pointer; }
+  .pack:hover { border-color: #667eea; }
+  .pack-left { text-align: left; }
+  .pack-hours { font-size: 18px; font-weight: 700; }
+  .pack-bonus { font-size: 12px; color: #4ade80; margin-top: 2px; }
+  .pack-price { font-size: 22px; font-weight: 700; color: #667eea; }
+  .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(100px); background: #1f1f2e; border: 1px solid rgba(255,255,255,0.15); padding: 14px 24px; border-radius: 50px; font-size: 14px; z-index: 200; transition: transform 0.3s; white-space: nowrap; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="home" class="screen active">
+  <div class="logo">GlobalCall</div>
+  <div class="tagline">Talk to the world · $1 = 1 hour</div>
+  <div class="balance-card">
+    <div class="balance-label">Your Balance</div>
+    <div class="balance-value" id="balanceDisplay">0 min</div>
+  </div>
+  <button class="btn btn-primary" onclick="startMatch()">🌍 Start Matching</button>
+  <button class="btn btn-secondary" onclick="openPaywall()">➕ Add Credits</button>
+</div>
+
+<div id="searching" class="screen">
+  <div class="radar"></div>
+  <div class="searching-text">Finding someone...</div>
+  <button class="btn btn-secondary" onclick="cancelSearch()">Cancel</button>
+</div>
+
+<div id="call" class="screen">
+  <div class="video-container">
+    <video id="remoteVideo" autoplay playsinline></video>
+    <video id="localVideo" autoplay playsinline muted></video>
+  </div>
+  <div class="call-overlay">
+    <div class="call-top">
+      <div class="timer-badge"><div class="timer-dot"></div><span id="callTimer">00:00</span></div>
+      <div class="timer-badge" id="countryBadge">🌍 Connected</div>
+    </div>
+    <div class="call-controls">
+      <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()">🎤</button>
+      <button class="ctrl-btn end" onclick="endCall()">📞</button>
+      <button class="ctrl-btn" id="camBtn" onclick="toggleCam()">📹</button>
+    </div>
+  </div>
+  <div class="warning-banner" id="warningBanner">⚠️ Low balance!</div>
+</div>
+
+<div class="modal-bg" id="paywall">
+  <div class="modal">
+    <h2>Add Credits</h2>
+    <p>$1 = 1 hour of video calls</p>
+    <div class="pack" onclick="buyPack(1,0)"><div class="pack-left"><div class="pack-hours">1 Hour</div></div><div class="pack-price">$1</div></div>
+    <div class="pack" onclick="buyPack(5,1)"><div class="pack-left"><div class="pack-hours">5 Hours</div><div class="pack-bonus">+1 hour FREE</div></div><div class="pack-price">$5</div></div>
+    <div class="pack" onclick="buyPack(10,3)"><div class="pack-left"><div class="pack-hours">10 Hours</div><div class="pack-bonus">+3 hours FREE</div></div><div class="pack-price">$10</div></div>
+    <button class="btn btn-secondary" style="margin-top:16px" onclick="closePaywall()">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const socket = io();
+
+const state = {
+  balanceSeconds: 0, callSeconds: 0,
+  billingInterval: null, timerInterval: null,
+  localStream: null, peerConnection: null,
+  isMuted: false, isCamOff: false, isCalling: false,
+  currentPartner: null,
+};
+
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('gc_balance');
+  state.balanceSeconds = saved ? parseInt(saved) : 0;
+  updateBalanceDisplay();
+  if (!localStorage.getItem('gc_welcomed')) {
+    state.balanceSeconds = 300;
+    saveBalance();
+    localStorage.setItem('gc_welcomed', '1');
+    updateBalanceDisplay();
+    toast('🎁 Welcome! 5 free minutes');
+  }
+});
+
+function saveBalance() { localStorage.setItem('gc_balance', state.balanceSeconds); }
+function updateBalanceDisplay() {
+  const mins = Math.floor(state.balanceSeconds / 60);
+  const el = document.getElementById('balanceDisplay');
+  el.textContent = mins + ' min';
+  el.classList.toggle('low', mins < 2);
+}
+function hasBalance() { return state.balanceSeconds > 0; }
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+async function startMatch() {
+  if (!hasBalance()) { openPaywall(); toast('Add credits first'); return; }
+  try {
+    state.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById('localVideo').srcObject = state.localStream;
+  } catch (err) {
+    toast('⚠️ Allow camera & mic access');
+    return;
+  }
+  showScreen('searching');
+  socket.emit('start-match');
+}
+
+socket.on('waiting', () => console.log('Waiting...'));
+
+socket.on('match-found', async ({ partnerId, initiator }) => {
+  state.currentPartner = partnerId;
+  showScreen('call');
+  await startCall(partnerId, initiator);
+});
+
+async function startCall(partnerId, initiator) {
+  state.isCalling = true;
+  state.callSeconds = 0;
+
+  state.peerConnection = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  });
+
+  state.localStream.getTracks().forEach(track => {
+    state.peerConnection.addTrack(track, state.localStream);
+  });
+
+  state.peerConnection.ontrack = (event) => {
+    document.getElementById('remoteVideo').srcObject = event.streams[0];
+  };
+
+  state.peerConnection.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit('ice-candidate', { to: partnerId, candidate: event.candidate });
+    }
+  };
+
+  if (initiator) {
+    const offer = await state.peerConnection.createOffer();
+    await state.peerConnection.setLocalDescription(offer);
+    socket.emit('offer', { to: partnerId, offer });
+  }
+
+  startBilling();
+}
+
+socket.on('offer', async ({ from, offer }) => {
+  state.currentPartner = from;
+  if (!state.peerConnection) await startCall(from, false);
+  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await state.peerConnection.createAnswer();
+  await state.peerConnection.setLocalDescription(answer);
+  socket.emit('answer', { to: from, answer });
+});
+
+socket.on('answer', async ({ answer }) => {
+  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+socket.on('ice-candidate', async ({ candidate }) => {
+  if (state.peerConnection && candidate) {
+    try { await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch (e) { console.error(e); }
+  }
+});
+
+socket.on('partner-left', () => { toast('Partner left'); endCall(); });
+
+function startBilling() {
+  state.timerInterval = setInterval(() => {
+    state.callSeconds++;
+    const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+    const s = String(state.callSeconds % 60).padStart(2, '0');
+    document.getElementById('callTimer').textContent = `${m}:${s}`;
+  }, 1000);
+
+  state.billingInterval = setInterval(() => {
+    if (state.balanceSeconds <= 0) {
+      endCall(); toast('💰 Balance empty'); openPaywall(); return;
+    }
+    state.balanceSeconds--;
+    saveBalance();
+    updateBalanceDisplay();
+    if (state.balanceSeconds === 60) {
+      document.getElementById('warningBanner').style.display = 'block';
+      setTimeout(() => document.getElementById('warningBanner').style.display = 'none', 5000);
+    }
+  }, 1000);
+}
+
+function endCall() {
+  if (!state.isCalling) return;
+  state.isCalling = false;
+  clearInterval(state.timerInterval);
+  clearInterval(state.billingInterval);
+  if (state.currentPartner) socket.emit('end-call', { to: state.currentPartner });
+  if (state.localStream) { state.localStream.getTracks().forEach(t => t.stop()); state.localStream = null; }
+  if (state.peerConnection) { state.peerConnection.close(); state.peerConnection = null; }
+  document.getElementById('remoteVideo').srcObject = null;
+  document.getElementById('localVideo').srcObject = null;
+  document.getElementById('callTimer').textContent = '00:00';
+  document.getElementById('warningBanner').style.display = 'none';
+  document.getElementById('muteBtn').classList.remove('muted');
+  document.getElementById('camBtn').classList.remove('muted');
+  state.currentPartner = null;
+  showScreen('home');
+  updateBalanceDisplay();
+}
+
+function cancelSearch() { showScreen('home'); }
+
+function toggleMute() {
+  if (!state.localStream) return;
+  state.isMuted = !state.isMuted;
+  state.localStream.getAudioTracks().forEach(t => t.enabled = !state.isMuted);
+  document.getElementById('muteBtn').classList.toggle('muted', state.isMuted);
+}
+
+function toggleCam() {
+  if (!state.localStream) return;
+  state.isCamOff = !state.isCamOff;
+  state.localStream.getVideoTracks().forEach(t => t.enabled = !state.isCamOff);
+  document.getElementById('camBtn').classList.toggle('muted', state.isCamOff);
+}
+
+function openPaywall() { document.getElementById('paywall').classList.add('active'); }
+function closePaywall() { document.getElementById('paywall').classList.remove('active'); }
+
+function buyPack(hours, bonus) {
+  const total = hours + bonus;
+  state.balanceSeconds += total * 3600;
+  saveBalance();
+  updateBalanceDisplay();
+  closePaywall();
+  toast(`✅ Added ${total}h`);
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+window.addEventListener('beforeunload', () => {
+  if (state.localStream) state.localStream.getTracks().forEach(t => t.stop());
+});
+</script>
+
+</body>
+</html>
