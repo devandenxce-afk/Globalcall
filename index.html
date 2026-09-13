@@ -275,18 +275,38 @@ function toggleCam() {
   state.localStream.getVideoTracks().forEach(t => t.enabled = !state.isCamOff);
   document.getElementById('camBtn').classList.toggle('muted', state.isCamOff);
 }
+async function buyPack(hours, bonus) {
+  const phone = prompt("Enter your M-Pesa phone number (e.g. 254712345678):");
+  if (!phone) return;
 
-function openPaywall() { document.getElementById('paywall').classList.add('active'); }
-function closePaywall() { document.getElementById('paywall').classList.remove('active'); }
+  // Convert hours to KES (approx 130 KES = $1)
+  const amount = hours * 130;
 
-function buyPack(hours, bonus) {
-  const total = hours + bonus;
-  state.balanceSeconds += total * 3600;
-  saveBalance();
-  updateBalanceDisplay();
-  closePaywall();
-  toast(`✅ Added ${total}h`);
+  toast('📱 Sending M-Pesa request...');
+
+  try {
+    const res = await fetch('/api/mpesa/topup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, amount })
+    });
+
+    const data = await res.json();
+
+    if (data.ResponseCode === '0' || data.CheckoutRequestID) {
+      toast('✅ Check your phone for the M-Pesa prompt');
+      closePaywall();
+      // Note: credits added only after payment confirms (via callback)
+    } else {
+      toast('⚠️ Payment failed. Try again.');
+      console.error(data);
+    }
+  } catch (err) {
+    console.error(err);
+    toast('⚠️ Network error');
+  }
 }
+
 
 let toastTimer;
 function toast(msg) {
