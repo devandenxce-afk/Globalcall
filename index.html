@@ -20,9 +20,10 @@
   .btn { border: none; border-radius: 50px; padding: 16px 48px; font-size: 17px; font-weight: 600; cursor: pointer; width: 100%; max-width: 320px; margin: 8px 0; }
   .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
   .btn-secondary { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15); }
-  .btn-danger { background: #ef4444; color: #fff; }
   .input { width: 100%; max-width: 320px; padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #fff; font-size: 16px; margin-bottom: 16px; text-align: center; }
   .input::placeholder { color: #666; }
+  select.input { appearance: none; }
+  select.input option { background: #15151f; color: #fff; }
   #searching { background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0f 70%); }
   .radar { width: 160px; height: 160px; border-radius: 50%; border: 2px solid rgba(102,126,234,0.3); position: relative; margin-bottom: 32px; }
   .radar::after { content: ''; position: absolute; inset: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); animation: pulse 2s ease-out infinite; }
@@ -68,7 +69,7 @@
   <button class="btn btn-secondary" onclick="denyAge()">No, I'm under 18</button>
 </div>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div id="login" class="screen">
   <div class="logo">GlobalCall</div>
   <div class="tagline">Enter your phone to get started</div>
@@ -87,13 +88,14 @@
   </div>
   <button class="btn btn-primary" onclick="startMatch()">🌍 Start Matching</button>
   <button class="btn btn-secondary" onclick="openPaywall()">➕ Add Credits</button>
+  <button class="btn btn-secondary" onclick="openSettings()">⚙️ Preferences</button>
   <button class="btn btn-secondary" style="font-size:13px;padding:10px 20px;max-width:200px;" onclick="logout()">Logout</button>
 </div>
 
 <!-- SEARCHING -->
 <div id="searching" class="screen">
   <div class="radar"></div>
-  <div class="searching-text">Finding someone...</div>
+  <div class="searching-text" id="searchingText">Finding someone...</div>
   <button class="btn btn-secondary" onclick="cancelSearch()">Cancel</button>
 </div>
 
@@ -143,6 +145,46 @@
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <h2>Preferences</h2>
+    <p>Who do you want to meet?</p>
+
+    <label style="display:block;color:#aaa;font-size:13px;text-align:left;margin-bottom:6px;">Language</label>
+    <select id="prefLang" class="input" style="text-align:left;">
+      <option value="any">Any language</option>
+      <option value="en">English</option>
+      <option value="sw">Swahili</option>
+      <option value="fr">French</option>
+      <option value="es">Spanish</option>
+      <option value="pt">Portuguese</option>
+      <option value="ar">Arabic</option>
+      <option value="hi">Hindi</option>
+      <option value="zh">Chinese</option>
+      <option value="ja">Japanese</option>
+    </select>
+
+    <label style="display:block;color:#aaa;font-size:13px;text-align:left;margin-bottom:6px;margin-top:8px;">Country</label>
+    <select id="prefCountry" class="input" style="text-align:left;">
+      <option value="any">Any country</option>
+      <option value="KE">Kenya</option>
+      <option value="NG">Nigeria</option>
+      <option value="ZA">South Africa</option>
+      <option value="US">USA</option>
+      <option value="GB">UK</option>
+      <option value="IN">India</option>
+      <option value="BR">Brazil</option>
+      <option value="JP">Japan</option>
+      <option value="DE">Germany</option>
+      <option value="FR">France</option>
+    </select>
+
+    <button class="btn btn-primary" style="margin-top:16px" onclick="saveSettings()">Save</button>
+    <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -167,10 +209,7 @@ window.addEventListener('load', () => {
   const ageOk = localStorage.getItem('gc_age_ok');
   const saved = localStorage.getItem('gc_phone');
 
-  if (!ageOk) {
-    showScreen('ageGate');
-    return;
-  }
+  if (!ageOk) { showScreen('ageGate'); return; }
   if (saved) {
     state.phone = saved;
     loadBalance();
@@ -193,7 +232,7 @@ function acceptAge() {
 }
 
 function denyAge() {
-  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;color:#fff;font-family:sans-serif;background:#0a0a0f;"><div><h1 style="font-size:24px;margin-bottom:12px;">Sorry</h1><p style="color:#888;">GlobalCall is for adults only (18+). Come back when you\'re older.</p></div></div>';
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;color:#fff;font-family:sans-serif;background:#0a0a0f;"><div><h1 style="font-size:24px;margin-bottom:12px;">Sorry</h1><p style="color:#888;">GlobalCall is for adults only (18+).</p></div></div>';
 }
 
 // ===== LOGIN =====
@@ -202,10 +241,7 @@ async function login() {
   phone = phone.replace(/\D/g, '');
   if (phone.startsWith('0')) phone = '254' + phone.slice(1);
   if (!phone.startsWith('254') && phone.length === 9) phone = '254' + phone;
-  if (phone.length !== 12) {
-    toast('⚠️ Enter a valid Safaricom number');
-    return;
-  }
+  if (phone.length !== 12) { toast('⚠️ Enter a valid Safaricom number'); return; }
   state.phone = phone;
   localStorage.setItem('gc_phone', phone);
   await loadBalance();
@@ -244,6 +280,28 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
+// ===== SETTINGS =====
+function openSettings() {
+  const lang = localStorage.getItem('gc_pref_lang') || 'any';
+  const country = localStorage.getItem('gc_pref_country') || 'any';
+  document.getElementById('prefLang').value = lang;
+  document.getElementById('prefCountry').value = country;
+  document.getElementById('settingsModal').classList.add('active');
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('active');
+}
+
+function saveSettings() {
+  const lang = document.getElementById('prefLang').value;
+  const country = document.getElementById('prefCountry').value;
+  localStorage.setItem('gc_pref_lang', lang);
+  localStorage.setItem('gc_pref_country', country);
+  closeSettings();
+  toast('✅ Preferences saved');
+}
+
 // ===== MATCHMAKING =====
 async function startMatch() {
   if (!hasBalance()) { openPaywall(); toast('Add credits first'); return; }
@@ -255,10 +313,15 @@ async function startMatch() {
     return;
   }
   showScreen('searching');
-  socket.emit('start-match');
+  socket.emit('start-match', {
+    lang: localStorage.getItem('gc_pref_lang') || 'any',
+    country: localStorage.getItem('gc_pref_country') || 'any'
+  });
 }
 
-socket.on('waiting', () => console.log('Waiting...'));
+socket.on('waiting', () => {
+  document.getElementById('searchingText').textContent = 'Finding someone...';
+});
 
 socket.on('match-found', async ({ partnerId, initiator }) => {
   state.currentPartner = partnerId;
@@ -399,30 +462,18 @@ function toggleCam() {
 }
 
 // ===== REPORT =====
-function openReport() {
-  document.getElementById('reportModal').classList.add('active');
-}
-function closeReport() {
-  document.getElementById('reportModal').classList.remove('active');
-}
+function openReport() { document.getElementById('reportModal').classList.add('active'); }
+function closeReport() { document.getElementById('reportModal').classList.remove('active'); }
 function submitReport(reason) {
   console.log('Reported:', reason, 'Partner:', state.currentPartner);
-  // Real version: send to server
-  // socket.emit('report-user', { partnerId: state.currentPartner, reason });
   closeReport();
   toast('✅ Report sent. Thanks!');
   endCall();
 }
 
 // ===== PAYWALL =====
-function openPaywall() {
-  const el = document.getElementById('paywall');
-  if (el) el.classList.add('active');
-}
-function closePaywall() {
-  const el = document.getElementById('paywall');
-  if (el) el.classList.remove('active');
-}
+function openPaywall() { document.getElementById('paywall').classList.add('active'); }
+function closePaywall() { document.getElementById('paywall').classList.remove('active'); }
 
 async function buyPack(hours, bonus) {
   const phone = state.phone;
