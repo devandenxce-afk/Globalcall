@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const axios = require('axios');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,6 +11,12 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
+
+// ===== SUPABASE =====
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
 
 // ===== MATCHMAKING =====
 let waitingUser = null;
@@ -41,7 +48,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// ===== M-PESA PAYMENT =====
+// ===== M-PESA =====
 async function getMpesaToken() {
   const auth = Buffer.from(
     `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
@@ -56,13 +63,19 @@ async function getMpesaToken() {
 app.post('/api/mpesa/topup', async (req, res) => {
   const { phone, amount } = req.body;
   try {
+    // Normalize phone: 0712... -> 254712..., +254 -> 254
+    let cleanPhone = String(phone).replace(/\D/g, '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '254' + cleanPhone.slice(1);
+    if (cleanPhone.startsWith('254') === false && cleanPhone.length === 9) {
+      cleanPhone = '254' + cleanPhone;
+    }
+
     const token = await getMpesaToken();
 
-    // Generate ONE timestamp in East Africa Time (UTC + 3)
+    // Single EAT timestamp
     const eat = new Date(Date.now() + 3 * 60 * 60 * 1000);
     const timestamp = eat.toISOString().replace(/\D/g, '').slice(0, 14);
 
-    // Use the SAME timestamp for password
     const password = Buffer.from(
       `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
     ).toString('base64');
@@ -75,12 +88,12 @@ app.post('/api/mpesa/topup', async (req, res) => {
         Timestamp: timestamp,
         TransactionType: 'CustomerPayBillOnline',
         Amount: amount,
-        PartyA: phone,
+        PartyA: cleanPhone,
         PartyB: process.env.MPESA_SHORTCODE,
-        PhoneNumber: phone,
+        PhoneNumber: cleanPhone,
         CallBackURL: 'https://globalcall-production.up.railway.app/api/mpesa/callback',
-        AccountReference: 'GlobalCall',
-        TransactionDesc: 'Video credits'
+        AccountReference: cleanPhone,
+        TransactionDesc: 'GlobalCall credits'
       },
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -93,16 +106,98 @@ app.post('/api/mpesa/topup', async (req, res) => {
   }
 });
 
-app.post('/api/mpesa/callback', (req, res) => {
-  const { Body } = req.body;
-  if (Body?.stkCallback?.ResultCode === 0) {
-    const amount = Body.stkCallback.CallbackMetadata.Item.find(i => i.Name === 'Amount').Value;
-    const phone = Body.stkCallback.CallbackMetadata.Item.find(i => i.Name === 'PhoneNumber').Value;
-    console.log(`💰 Payment: ${phone} paid ${amount} KES`);
-  } else {
-    console.log('❌ Payment failed:', Body?.stkCallback?.ResultDesc);
+// ===== M-PESA CALLBACK =====
+app.post('/api/mpesa/callback', async (req, res) => {
+  try {
+    const { Body } = req.body;
+    const callback = Body?.stkCallback;
+
+    if (!callback) {
+      return res.json({ ResultCode: 0, ResultDesc: 'No callback' });
+    }
+
+    if (callback.ResultCode === 0) {
+      const items = callback.CallbackMetadata.Item;
+      const amount = items.find(i => i.Name === 'Amount')?.Value;
+      const phone = String(items.find(i => i.Name === 'PhoneNumber')?.Value);
+
+      // Credits: 1 KES = 3600 sec / 130 KES per hour ≈ 27.7 sec per KES
+      // Simpler: amount in KES * 27 seconds (since $1=130 KES=3600 sec)
+      const creditsSeconds = Math.floor(amount * (3600 / 130));
+
+      console.log(`💰 Payment: ${phone} paid ${amount} KES → ${creditsSeconds} sec`);
+
+      // Find or create user, then add credits
+      const { data: existing, error: findErr } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (findErr) console.error('Supabase find error:', findErr);
+
+      if (existing) {
+        await supabase
+          .from('users')
+          .update({ balance_seconds: existing.balance_seconds + creditsSeconds })
+          .eq('phone', phone);
+      } else {
+        await supabase
+          .from('users')
+          .insert({ phone, balance_seconds: creditsSeconds });
+      }
+    } else {
+      console.log('❌ Payment failed:', callback.ResultDesc);
+    }
+
+    res.json({ ResultCode: 0, ResultDesc: 'Success' });
+  } catch (err) {
+    console.error('Callback error:', err);
+    res.json({ ResultCode: 0, ResultDesc: 'Handled' });
   }
-  res.json({ ResultCode: 0, ResultDesc: 'Success' });
+});
+
+// ===== USER BALANCE ENDPOINTS =====
+app.get('/api/balance/:phone', async (req, res) => {
+  try {
+    const phone = req.params.phone;
+    const { data, error } = await supabase
+      .from('users')
+      .select('balance_seconds')
+      .eq('phone', phone)
+      .maybeSingle();
+
+    if (error) throw error;
+    res.json({ balance: data?.balance_seconds || 0 });
+  } catch (err) {
+    console.error('Balance fetch error:', err);
+    res.status(500).json({ balance: 0 });
+  }
+});
+
+app.post('/api/balance/deduct', async (req, res) => {
+  try {
+    const { phone, seconds } = req.body;
+    const { data: user } = await supabase
+      .from('users')
+      .select('balance_seconds')
+      .eq('phone', phone)
+      .maybeSingle();
+
+    if (user) {
+      const newBalance = Math.max(0, user.balance_seconds - seconds);
+      await supabase
+        .from('users')
+        .update({ balance_seconds: newBalance })
+        .eq('phone', phone);
+      res.json({ balance: newBalance });
+    } else {
+      res.json({ balance: 0 });
+    }
+  } catch (err) {
+    console.error('Deduct error:', err);
+    res.status(500).json({ balance: 0 });
+  }
 });
 
 // ===== START SERVER =====
