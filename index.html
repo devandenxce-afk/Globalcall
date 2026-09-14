@@ -11,6 +11,7 @@
   .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
   .screen.active { display: flex; }
   #home { background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 70%); }
+  #login { background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 70%); }
   .logo { font-size: 42px; font-weight: 800; background: linear-gradient(135deg, #667eea, #f093fb, #f5576c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
   .tagline { color: #888; font-size: 15px; margin-bottom: 40px; }
   .balance-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px 32px; margin-bottom: 24px; min-width: 200px; }
@@ -18,8 +19,10 @@
   .balance-value { font-size: 32px; font-weight: 700; margin-top: 4px; color: #4ade80; }
   .balance-value.low { color: #f87171; }
   .btn { border: none; border-radius: 50px; padding: 16px 48px; font-size: 17px; font-weight: 600; cursor: pointer; width: 100%; max-width: 320px; margin: 8px 0; }
-  .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; box-shadow: 0 8px 24px rgba(102,126,234,0.4); }
+  .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
   .btn-secondary { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15); }
+  .input { width: 100%; max-width: 320px; padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #fff; font-size: 16px; margin-bottom: 16px; text-align: center; }
+  .input::placeholder { color: #666; }
   #searching { background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0f 70%); }
   .radar { width: 160px; height: 160px; border-radius: 50%; border: 2px solid rgba(102,126,234,0.3); position: relative; margin-bottom: 32px; }
   .radar::after { content: ''; position: absolute; inset: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); animation: pulse 2s ease-out infinite; }
@@ -55,7 +58,17 @@
 </head>
 <body>
 
-<div id="home" class="screen active">
+<!-- LOGIN SCREEN -->
+<div id="login" class="screen active">
+  <div class="logo">GlobalCall</div>
+  <div class="tagline">Enter your phone to get started</div>
+  <input id="phoneInput" class="input" type="tel" placeholder="254712345678" />
+  <button class="btn btn-primary" onclick="login()">Continue</button>
+  <p style="color:#666;font-size:12px;margin-top:16px;max-width:280px;">We use your phone number to track your balance and connect you to calls.</p>
+</div>
+
+<!-- HOME SCREEN -->
+<div id="home" class="screen">
   <div class="logo">GlobalCall</div>
   <div class="tagline">Talk to the world · $1 = 1 hour</div>
   <div class="balance-card">
@@ -64,14 +77,17 @@
   </div>
   <button class="btn btn-primary" onclick="startMatch()">🌍 Start Matching</button>
   <button class="btn btn-secondary" onclick="openPaywall()">➕ Add Credits</button>
+  <button class="btn btn-secondary" style="font-size:13px;padding:10px 20px;max-width:200px;" onclick="logout()">Logout</button>
 </div>
 
+<!-- SEARCHING SCREEN -->
 <div id="searching" class="screen">
   <div class="radar"></div>
   <div class="searching-text">Finding someone...</div>
   <button class="btn btn-secondary" onclick="cancelSearch()">Cancel</button>
 </div>
 
+<!-- CALL SCREEN -->
 <div id="call" class="screen">
   <div class="video-container">
     <video id="remoteVideo" autoplay playsinline></video>
@@ -91,6 +107,7 @@
   <div class="warning-banner" id="warningBanner">⚠️ Low balance!</div>
 </div>
 
+<!-- PAYWALL -->
 <div class="modal-bg" id="paywall">
   <div class="modal">
     <h2>Add Credits</h2>
@@ -108,33 +125,73 @@
 const socket = io();
 
 const state = {
-  balanceSeconds: 0, callSeconds: 0,
-  billingInterval: null, timerInterval: null,
-  localStream: null, peerConnection: null,
-  isMuted: false, isCamOff: false, isCalling: false,
+  phone: null,
+  balanceSeconds: 0,
+  callSeconds: 0,
+  billingInterval: null,
+  timerInterval: null,
+  localStream: null,
+  peerConnection: null,
+  isMuted: false,
+  isCamOff: false,
+  isCalling: false,
   currentPartner: null,
 };
 
+// ===== LOGIN =====
 window.addEventListener('load', () => {
-  const saved = localStorage.getItem('gc_balance');
-  state.balanceSeconds = saved ? parseInt(saved) : 0;
-  updateBalanceDisplay();
-  if (!localStorage.getItem('gc_welcomed')) {
-    state.balanceSeconds = 300;
-    saveBalance();
-    localStorage.setItem('gc_welcomed', '1');
-    updateBalanceDisplay();
-    toast('🎁 Welcome! 5 free minutes');
+  const saved = localStorage.getItem('gc_phone');
+  if (saved) {
+    state.phone = saved;
+    loadBalance();
+    showScreen('home');
+  } else {
+    showScreen('login');
   }
 });
 
-function saveBalance() { localStorage.setItem('gc_balance', state.balanceSeconds); }
+async function login() {
+  let phone = document.getElementById('phoneInput').value.trim();
+  phone = phone.replace(/\D/g, '');
+  if (phone.startsWith('0')) phone = '254' + phone.slice(1);
+  if (!phone.startsWith('254') && phone.length === 9) phone = '254' + phone;
+  if (phone.length !== 12) {
+    toast('⚠️ Enter a valid Safaricom number');
+    return;
+  }
+  state.phone = phone;
+  localStorage.setItem('gc_phone', phone);
+  await loadBalance();
+  showScreen('home');
+  toast('✅ Logged in');
+}
+
+function logout() {
+  localStorage.removeItem('gc_phone');
+  state.phone = null;
+  state.balanceSeconds = 0;
+  location.reload();
+}
+
+async function loadBalance() {
+  try {
+    const res = await fetch('/api/balance/' + state.phone);
+    const data = await res.json();
+    state.balanceSeconds = data.balance || 0;
+    updateBalanceDisplay();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function updateBalanceDisplay() {
   const mins = Math.floor(state.balanceSeconds / 60);
   const el = document.getElementById('balanceDisplay');
+  if (!el) return;
   el.textContent = mins + ' min';
   el.classList.toggle('low', mins < 2);
 }
+
 function hasBalance() { return state.balanceSeconds > 0; }
 
 function showScreen(id) {
@@ -142,6 +199,7 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
+// ===== MATCHMAKING =====
 async function startMatch() {
   if (!hasBalance()) { openPaywall(); toast('Add credits first'); return; }
   try {
@@ -219,6 +277,7 @@ socket.on('ice-candidate', async ({ candidate }) => {
 
 socket.on('partner-left', () => { toast('Partner left'); endCall(); });
 
+// ===== BILLING =====
 function startBilling() {
   state.timerInterval = setInterval(() => {
     state.callSeconds++;
@@ -229,10 +288,12 @@ function startBilling() {
 
   state.billingInterval = setInterval(() => {
     if (state.balanceSeconds <= 0) {
-      endCall(); toast('💰 Balance empty'); openPaywall(); return;
+      endCall();
+      toast('💰 Balance empty');
+      openPaywall();
+      return;
     }
     state.balanceSeconds--;
-    saveBalance();
     updateBalanceDisplay();
     if (state.balanceSeconds === 60) {
       document.getElementById('warningBanner').style.display = 'block';
@@ -241,14 +302,31 @@ function startBilling() {
   }, 1000);
 }
 
-function endCall() {
+async function endCall() {
   if (!state.isCalling) return;
   state.isCalling = false;
+
+  // Save used seconds to server
+  const used = state.callSeconds;
   clearInterval(state.timerInterval);
   clearInterval(state.billingInterval);
+
   if (state.currentPartner) socket.emit('end-call', { to: state.currentPartner });
+
   if (state.localStream) { state.localStream.getTracks().forEach(t => t.stop()); state.localStream = null; }
   if (state.peerConnection) { state.peerConnection.close(); state.peerConnection = null; }
+
+  if (used > 0 && state.phone) {
+    try {
+      await fetch('/api/balance/deduct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: state.phone, seconds: used })
+      });
+      await loadBalance();
+    } catch (e) { console.error(e); }
+  }
+
   document.getElementById('remoteVideo').srcObject = null;
   document.getElementById('localVideo').srcObject = null;
   document.getElementById('callTimer').textContent = '00:00';
@@ -256,8 +334,8 @@ function endCall() {
   document.getElementById('muteBtn').classList.remove('muted');
   document.getElementById('camBtn').classList.remove('muted');
   state.currentPartner = null;
+  state.callSeconds = 0;
   showScreen('home');
-  updateBalanceDisplay();
 }
 
 function cancelSearch() { showScreen('home'); }
@@ -276,6 +354,7 @@ function toggleCam() {
   document.getElementById('camBtn').classList.toggle('muted', state.isCamOff);
 }
 
+// ===== PAYWALL =====
 function openPaywall() {
   const el = document.getElementById('paywall');
   if (el) el.classList.add('active');
@@ -286,8 +365,8 @@ function closePaywall() {
 }
 
 async function buyPack(hours, bonus) {
-  const phone = prompt("Enter M-Pesa phone (e.g. 254712345678):");
-  if (!phone) return;
+  const phone = state.phone;
+  if (!phone) { toast('Login first'); return; }
   const amount = hours * 130;
   toast('📱 Sending M-Pesa request...');
   try {
@@ -300,6 +379,9 @@ async function buyPack(hours, bonus) {
     if (data.CheckoutRequestID || data.ResponseCode === '0') {
       toast('✅ Check your phone for M-Pesa');
       closePaywall();
+      // Poll for balance update (callback will add it)
+      setTimeout(loadBalance, 15000);
+      setTimeout(loadBalance, 30000);
     } else {
       toast('⚠️ Payment failed. Try again.');
       console.error(data);
@@ -310,6 +392,7 @@ async function buyPack(hours, bonus) {
   }
 }
 
+// ===== TOAST =====
 let toastTimer;
 function toast(msg) {
   const el = document.getElementById('toast');
@@ -325,4 +408,4 @@ window.addEventListener('beforeunload', () => {
 </script>
 
 </body>
- </html>
+</html>
