@@ -2,13 +2,16 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const axios = require('axios');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
+// ===== MATCHMAKING =====
 let waitingUser = null;
 
 io.on('connection', (socket) => {
@@ -34,13 +37,11 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (waitingUser === socket.id) waitingUser = null;
+    console.log('User disconnected:', socket.id);
   });
 });
 
-const PORT = process.env.PORT || 3000;
 // ===== M-PESA PAYMENT =====
-const axios = require('axios');
-
 async function getMpesaToken() {
   const auth = Buffer.from(
     `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
@@ -52,13 +53,16 @@ async function getMpesaToken() {
   return res.data.access_token;
 }
 
-app.use(express.json());
-
 app.post('/api/mpesa/topup', async (req, res) => {
   const { phone, amount } = req.body;
   try {
     const token = await getMpesaToken();
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+
+    // Generate ONE timestamp in East Africa Time (UTC + 3)
+    const eat = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    const timestamp = eat.toISOString().replace(/\D/g, '').slice(0, 14);
+
+    // Use the SAME timestamp for password
     const password = Buffer.from(
       `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
     ).toString('base64');
@@ -80,10 +84,12 @@ app.post('/api/mpesa/topup', async (req, res) => {
       },
       { headers: { Authorization: `Bearer ${token}` } }
     );
+
+    console.log('✅ STK Push sent:', response.data);
     res.json(response.data);
   } catch (error) {
-    console.error(error.response?.data || error.message);
-    res.status(500).json({ error: 'Payment initiation failed' });
+    console.error('❌ M-Pesa error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Payment initiation failed', details: error.response?.data });
   }
 });
 
@@ -93,10 +99,12 @@ app.post('/api/mpesa/callback', (req, res) => {
     const amount = Body.stkCallback.CallbackMetadata.Item.find(i => i.Name === 'Amount').Value;
     const phone = Body.stkCallback.CallbackMetadata.Item.find(i => i.Name === 'PhoneNumber').Value;
     console.log(`💰 Payment: ${phone} paid ${amount} KES`);
-    // TODO: add credits to user in DB
+  } else {
+    console.log('❌ Payment failed:', Body?.stkCallback?.ResultDesc);
   }
   res.json({ ResultCode: 0, ResultDesc: 'Success' });
 });
 
-// ===== END M-PESA =====
+// ===== START SERVER =====
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
