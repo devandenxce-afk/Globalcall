@@ -18,23 +18,67 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// ===== MATCHMAKING =====
-let waitingUser = null;
+// ===== SMART MATCHING =====
+// Each waiting user stores: { id, prefs, joinedAt }
+let waitingUsers = [];
+
+// Compatible if both have "any" OR their preferences overlap
+function isCompatible(a, b) {
+  const langOk = a.lang === 'any' || b.lang === 'any' || a.lang === b.lang;
+  const countryOk = a.country === 'any' || b.country === 'any' || a.country === b.country;
+  return langOk && countryOk;
+}
+
+// Find the best match for a new user
+function findMatch(newUser) {
+  // First, try exact preference match
+  for (let i = 0; i < waitingUsers.length; i++) {
+    if (isCompatible(newUser.prefs, waitingUsers[i].prefs)) {
+      return i;
+    }
+  }
+  // Fallback: if new user wants "any", match with anyone
+  if (newUser.prefs.lang === 'any' && newUser.prefs.country === 'any') {
+    return waitingUsers.length > 0 ? 0 : -1;
+  }
+  // No match found
+  return -1;
+}
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('start-match', () => {
-    if (waitingUser && waitingUser !== socket.id) {
-      const partnerId = waitingUser;
-      waitingUser = null;
-      socket.join(partnerId);
-      io.to(partnerId).emit('match-found', { partnerId: socket.id, initiator: true });
-      socket.emit('match-found', { partnerId, initiator: false });
+  socket.on('start-match', (prefs) => {
+    // Clean prefs
+    const userPrefs = {
+      lang: prefs?.lang || 'any',
+      country: prefs?.country || 'any'
+    };
+
+    const newUser = { id: socket.id, prefs: userPrefs, joinedAt: Date.now() };
+    const matchIndex = findMatch(newUser);
+
+    if (matchIndex !== -1) {
+      // Found a match — pair them
+      const partner = waitingUsers.splice(matchIndex, 1)[0];
+      socket.join(partner.id);
+      io.to(partner.id).emit('match-found', { partnerId: socket.id, initiator: true });
+      socket.emit('match-found', { partnerId: partner.id, initiator: false });
+
+      console.log(`🤝 Matched: ${partner.id} (${JSON.stringify(partner.prefs)}) ↔ ${socket.id} (${JSON.stringify(userPrefs)})`);
     } else {
-      waitingUser = socket.id;
+      // No match — add to queue
+      // Remove any existing entry for this socket first
+      waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
+      waitingUsers.push(newUser);
       socket.emit('waiting');
+      console.log(`⏳ Waiting: ${socket.id} prefs=${JSON.stringify(userPrefs)} queue=${waitingUsers.length}`);
     }
+  });
+
+  // Cancel waiting (user closed the searching screen)
+  socket.on('cancel-match', () => {
+    waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
   });
 
   socket.on('offer', ({ to, offer }) => io.to(to).emit('offer', { from: socket.id, offer }));
@@ -43,7 +87,7 @@ io.on('connection', (socket) => {
   socket.on('end-call', ({ to }) => { if (to) io.to(to).emit('partner-left'); });
 
   socket.on('disconnect', () => {
-    if (waitingUser === socket.id) waitingUser = null;
+    waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
     console.log('User disconnected:', socket.id);
   });
 });
@@ -70,7 +114,6 @@ app.post('/api/mpesa/topup', async (req, res) => {
     }
 
     const token = await getMpesaToken();
-
     const eat = new Date(Date.now() + 3 * 60 * 60 * 1000);
     const timestamp = eat.toISOString().replace(/\D/g, '').slice(0, 14);
 
@@ -109,7 +152,6 @@ app.post('/api/mpesa/callback', async (req, res) => {
   try {
     const { Body } = req.body;
     const callback = Body?.stkCallback;
-
     if (!callback) return res.json({ ResultCode: 0, ResultDesc: 'No callback' });
 
     if (callback.ResultCode === 0) {
@@ -146,7 +188,7 @@ app.post('/api/mpesa/callback', async (req, res) => {
   }
 });
 
-// ===== BALANCE ENDPOINTS =====
+// ===== BALANCE =====
 app.get('/api/balance/:phone', async (req, res) => {
   try {
     const phone = req.params.phone;
