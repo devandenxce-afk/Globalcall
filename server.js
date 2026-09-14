@@ -19,29 +19,21 @@ const supabase = createClient(
 );
 
 // ===== SMART MATCHING =====
-// Each waiting user stores: { id, prefs, joinedAt }
 let waitingUsers = [];
 
-// Compatible if both have "any" OR their preferences overlap
 function isCompatible(a, b) {
   const langOk = a.lang === 'any' || b.lang === 'any' || a.lang === b.lang;
   const countryOk = a.country === 'any' || b.country === 'any' || a.country === b.country;
   return langOk && countryOk;
 }
 
-// Find the best match for a new user
 function findMatch(newUser) {
-  // First, try exact preference match
   for (let i = 0; i < waitingUsers.length; i++) {
-    if (isCompatible(newUser.prefs, waitingUsers[i].prefs)) {
-      return i;
-    }
+    if (isCompatible(newUser.prefs, waitingUsers[i].prefs)) return i;
   }
-  // Fallback: if new user wants "any", match with anyone
   if (newUser.prefs.lang === 'any' && newUser.prefs.country === 'any') {
     return waitingUsers.length > 0 ? 0 : -1;
   }
-  // No match found
   return -1;
 }
 
@@ -49,34 +41,27 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   socket.on('start-match', (prefs) => {
-    // Clean prefs
     const userPrefs = {
       lang: prefs?.lang || 'any',
       country: prefs?.country || 'any'
     };
-
     const newUser = { id: socket.id, prefs: userPrefs, joinedAt: Date.now() };
     const matchIndex = findMatch(newUser);
 
     if (matchIndex !== -1) {
-      // Found a match — pair them
       const partner = waitingUsers.splice(matchIndex, 1)[0];
       socket.join(partner.id);
       io.to(partner.id).emit('match-found', { partnerId: socket.id, initiator: true });
       socket.emit('match-found', { partnerId: partner.id, initiator: false });
-
-      console.log(`🤝 Matched: ${partner.id} (${JSON.stringify(partner.prefs)}) ↔ ${socket.id} (${JSON.stringify(userPrefs)})`);
+      console.log(`🤝 Matched: ${partner.id} ↔ ${socket.id}`);
     } else {
-      // No match — add to queue
-      // Remove any existing entry for this socket first
       waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
       waitingUsers.push(newUser);
       socket.emit('waiting');
-      console.log(`⏳ Waiting: ${socket.id} prefs=${JSON.stringify(userPrefs)} queue=${waitingUsers.length}`);
+      console.log(`⏳ Waiting: ${socket.id} queue=${waitingUsers.length}`);
     }
   });
 
-  // Cancel waiting (user closed the searching screen)
   socket.on('cancel-match', () => {
     waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
   });
@@ -188,7 +173,9 @@ app.post('/api/mpesa/callback', async (req, res) => {
   }
 });
 
-// ===== BALANCE =====
+// ===== BALANCE (with 5 free min for new users) =====
+const FREE_SECONDS = 300; // 5 minutes
+
 app.get('/api/balance/:phone', async (req, res) => {
   try {
     const phone = req.params.phone;
@@ -197,9 +184,22 @@ app.get('/api/balance/:phone', async (req, res) => {
       .select('balance_seconds')
       .eq('phone', phone)
       .maybeSingle();
-    res.json({ balance: data?.balance_seconds || 0 });
+
+    if (data) {
+      // Existing user — return balance
+      res.json({ balance: data.balance_seconds, new_user: false });
+    } else {
+      // New user — create with 5 free minutes
+      const { error: insertErr } = await supabase
+        .from('users')
+        .insert({ phone, balance_seconds: FREE_SECONDS });
+      if (insertErr) console.error('Insert error:', insertErr);
+      console.log(`🎁 New user: ${phone} → ${FREE_SECONDS} free seconds`);
+      res.json({ balance: FREE_SECONDS, new_user: true });
+    }
   } catch (err) {
-    res.status(500).json({ balance: 0 });
+    console.error('Balance error:', err);
+    res.status(500).json({ balance: 0, new_user: false });
   }
 });
 
