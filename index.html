@@ -10,8 +10,7 @@
   html, body { height: 100%; font-family: -apple-system, sans-serif; background: #0a0a0f; color: #fff; overflow: hidden; }
   .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
   .screen.active { display: flex; }
-  #home { background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 70%); }
-  #login { background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 70%); }
+  #home, #login, #ageGate { background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 70%); }
   .logo { font-size: 42px; font-weight: 800; background: linear-gradient(135deg, #667eea, #f093fb, #f5576c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
   .tagline { color: #888; font-size: 15px; margin-bottom: 40px; }
   .balance-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px 32px; margin-bottom: 24px; min-width: 200px; }
@@ -21,6 +20,7 @@
   .btn { border: none; border-radius: 50px; padding: 16px 48px; font-size: 17px; font-weight: 600; cursor: pointer; width: 100%; max-width: 320px; margin: 8px 0; }
   .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
   .btn-secondary { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15); }
+  .btn-danger { background: #ef4444; color: #fff; }
   .input { width: 100%; max-width: 320px; padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: #fff; font-size: 16px; margin-bottom: 16px; text-align: center; }
   .input::placeholder { color: #666; }
   #searching { background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0f 70%); }
@@ -36,10 +36,11 @@
   .call-top { display: flex; justify-content: space-between; align-items: flex-start; }
   .timer-badge { background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 50px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .timer-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; }
-  .call-controls { display: flex; justify-content: center; gap: 16px; pointer-events: auto; padding-bottom: 16px; }
+  .call-controls { display: flex; justify-content: center; gap: 12px; pointer-events: auto; padding-bottom: 16px; }
   .ctrl-btn { width: 60px; height: 60px; border-radius: 50%; border: none; background: rgba(255,255,255,0.15); color: #fff; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .ctrl-btn.end { background: #ef4444; }
   .ctrl-btn.muted { background: #f59e0b; }
+  .ctrl-btn.report { background: #dc2626; font-size: 22px; }
   .warning-banner { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); background: rgba(245,158,11,0.95); color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 600; font-size: 14px; z-index: 20; display: none; }
   .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 100; padding: 24px; }
   .modal-bg.active { display: flex; }
@@ -58,8 +59,17 @@
 </head>
 <body>
 
+<!-- AGE GATE -->
+<div id="ageGate" class="screen active">
+  <div class="logo">GlobalCall</div>
+  <div class="tagline">Are you 18 or older?</div>
+  <p style="color:#888;font-size:13px;margin-bottom:24px;max-width:300px;">GlobalCall is for adults only. By continuing, you confirm you are 18 years or older and agree to our Terms of Service.</p>
+  <button class="btn btn-primary" onclick="acceptAge()">Yes, I'm 18+</button>
+  <button class="btn btn-secondary" onclick="denyAge()">No, I'm under 18</button>
+</div>
+
 <!-- LOGIN SCREEN -->
-<div id="login" class="screen active">
+<div id="login" class="screen">
   <div class="logo">GlobalCall</div>
   <div class="tagline">Enter your phone to get started</div>
   <input id="phoneInput" class="input" type="tel" placeholder="254712345678" />
@@ -67,7 +77,7 @@
   <p style="color:#666;font-size:12px;margin-top:16px;max-width:280px;">We use your phone number to track your balance and connect you to calls.</p>
 </div>
 
-<!-- HOME SCREEN -->
+<!-- HOME -->
 <div id="home" class="screen">
   <div class="logo">GlobalCall</div>
   <div class="tagline">Talk to the world · $1 = 1 hour</div>
@@ -80,14 +90,14 @@
   <button class="btn btn-secondary" style="font-size:13px;padding:10px 20px;max-width:200px;" onclick="logout()">Logout</button>
 </div>
 
-<!-- SEARCHING SCREEN -->
+<!-- SEARCHING -->
 <div id="searching" class="screen">
   <div class="radar"></div>
   <div class="searching-text">Finding someone...</div>
   <button class="btn btn-secondary" onclick="cancelSearch()">Cancel</button>
 </div>
 
-<!-- CALL SCREEN -->
+<!-- CALL -->
 <div id="call" class="screen">
   <div class="video-container">
     <video id="remoteVideo" autoplay playsinline></video>
@@ -101,6 +111,7 @@
     <div class="call-controls">
       <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()">🎤</button>
       <button class="ctrl-btn end" onclick="endCall()">📞</button>
+      <button class="ctrl-btn report" onclick="openReport()">🚨</button>
       <button class="ctrl-btn" id="camBtn" onclick="toggleCam()">📹</button>
     </div>
   </div>
@@ -116,6 +127,19 @@
     <div class="pack" onclick="buyPack(5,1)"><div class="pack-left"><div class="pack-hours">5 Hours</div><div class="pack-bonus">+1 hour FREE</div></div><div class="pack-price">$5</div></div>
     <div class="pack" onclick="buyPack(10,3)"><div class="pack-left"><div class="pack-hours">10 Hours</div><div class="pack-bonus">+3 hours FREE</div></div><div class="pack-price">$10</div></div>
     <button class="btn btn-secondary" style="margin-top:16px" onclick="closePaywall()">Cancel</button>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-bg" id="reportModal">
+  <div class="modal">
+    <h2>Report User</h2>
+    <p>Why are you reporting this person?</p>
+    <button class="btn btn-secondary" onclick="submitReport('nudity')">Nudity / Sexual content</button>
+    <button class="btn btn-secondary" onclick="submitReport('harassment')">Harassment / Abuse</button>
+    <button class="btn btn-secondary" onclick="submitReport('minor')">Underage user</button>
+    <button class="btn btn-secondary" onclick="submitReport('spam')">Spam / Scam</button>
+    <button class="btn btn-secondary" style="margin-top:16px" onclick="closeReport()">Cancel</button>
   </div>
 </div>
 
@@ -138,9 +162,15 @@ const state = {
   currentPartner: null,
 };
 
-// ===== LOGIN =====
+// ===== AGE GATE =====
 window.addEventListener('load', () => {
+  const ageOk = localStorage.getItem('gc_age_ok');
   const saved = localStorage.getItem('gc_phone');
+
+  if (!ageOk) {
+    showScreen('ageGate');
+    return;
+  }
   if (saved) {
     state.phone = saved;
     loadBalance();
@@ -150,6 +180,23 @@ window.addEventListener('load', () => {
   }
 });
 
+function acceptAge() {
+  localStorage.setItem('gc_age_ok', '1');
+  const saved = localStorage.getItem('gc_phone');
+  if (saved) {
+    state.phone = saved;
+    loadBalance();
+    showScreen('home');
+  } else {
+    showScreen('login');
+  }
+}
+
+function denyAge() {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;color:#fff;font-family:sans-serif;background:#0a0a0f;"><div><h1 style="font-size:24px;margin-bottom:12px;">Sorry</h1><p style="color:#888;">GlobalCall is for adults only (18+). Come back when you\'re older.</p></div></div>';
+}
+
+// ===== LOGIN =====
 async function login() {
   let phone = document.getElementById('phoneInput').value.trim();
   phone = phone.replace(/\D/g, '');
@@ -179,9 +226,7 @@ async function loadBalance() {
     const data = await res.json();
     state.balanceSeconds = data.balance || 0;
     updateBalanceDisplay();
-  } catch (err) {
-    console.error(err);
-  }
+  } catch (err) { console.error(err); }
 }
 
 function updateBalanceDisplay() {
@@ -306,7 +351,6 @@ async function endCall() {
   if (!state.isCalling) return;
   state.isCalling = false;
 
-  // Save used seconds to server
   const used = state.callSeconds;
   clearInterval(state.timerInterval);
   clearInterval(state.billingInterval);
@@ -354,6 +398,22 @@ function toggleCam() {
   document.getElementById('camBtn').classList.toggle('muted', state.isCamOff);
 }
 
+// ===== REPORT =====
+function openReport() {
+  document.getElementById('reportModal').classList.add('active');
+}
+function closeReport() {
+  document.getElementById('reportModal').classList.remove('active');
+}
+function submitReport(reason) {
+  console.log('Reported:', reason, 'Partner:', state.currentPartner);
+  // Real version: send to server
+  // socket.emit('report-user', { partnerId: state.currentPartner, reason });
+  closeReport();
+  toast('✅ Report sent. Thanks!');
+  endCall();
+}
+
 // ===== PAYWALL =====
 function openPaywall() {
   const el = document.getElementById('paywall');
@@ -379,7 +439,6 @@ async function buyPack(hours, bonus) {
     if (data.CheckoutRequestID || data.ResponseCode === '0') {
       toast('✅ Check your phone for M-Pesa');
       closePaywall();
-      // Poll for balance update (callback will add it)
       setTimeout(loadBalance, 15000);
       setTimeout(loadBalance, 30000);
     } else {
