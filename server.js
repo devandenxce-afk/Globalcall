@@ -12,7 +12,6 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// ===== SUPABASE =====
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -20,6 +19,9 @@ const supabase = createClient(
 
 // ===== SMART MATCHING =====
 let waitingUsers = [];
+
+// Map socket IDs to phone numbers (for reporting)
+const socketPhones = {};
 
 function isCompatible(a, b) {
   const langOk = a.lang === 'any' || b.lang === 'any' || a.lang === b.lang;
@@ -37,10 +39,31 @@ function findMatch(newUser) {
   return -1;
 }
 
+async function isBanned(phone) {
+  if (!phone) return false;
+  const { data } = await supabase
+    .from('bans')
+    .select('phone')
+    .eq('phone', phone)
+    .maybeSingle();
+  return !!data;
+}
+
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('start-match', (prefs) => {
+  socket.on('register-phone', (phone) => {
+    socketPhones[socket.id] = phone;
+  });
+
+  socket.on('start-match', async (prefs) => {
+    // Check if banned
+    const phone = socketPhones[socket.id];
+    if (phone && await isBanned(phone)) {
+      socket.emit('banned');
+      return;
+    }
+
     const userPrefs = {
       lang: prefs?.lang || 'any',
       country: prefs?.country || 'any'
@@ -66,6 +89,46 @@ io.on('connection', (socket) => {
     waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
   });
 
+  // ===== REPORT =====
+  socket.on('report-user', async ({ reportedSocket, reason }) => {
+    const reporterPhone = socketPhones[socket.id];
+    const reportedPhone = socketPhones[reportedSocket];
+
+    console.log(`🚨 Report: ${reporterPhone} → ${reportedPhone || reportedSocket} (${reason})`);
+
+    // Save report
+    await supabase.from('reports').insert({
+      reporter_phone: reporterPhone || 'unknown',
+      reported_phone: reportedPhone || null,
+      reported_socket: reportedSocket || null,
+      reason: reason
+    });
+
+    // Count reports on this user
+    if (reportedPhone) {
+      const { data: userReports } = await supabase
+        .from('reports')
+        .select('id')
+        .eq('reported_phone', reportedPhone);
+
+      const count = userReports?.length || 0;
+      console.log(`📊 ${reportedPhone} now has ${count} reports`);
+
+      // Auto-ban at 3+ reports
+      if (count >= 3) {
+        await supabase.from('bans').insert({
+          phone: reportedPhone,
+          reason: `Auto-banned after ${count} reports`
+        });
+        console.log(`🚫 BANNED: ${reportedPhone}`);
+
+        // Kick them from any ongoing call
+        io.to(reportedSocket).emit('banned');
+      }
+    }
+  });
+
+  // ===== WebRTC SIGNALING =====
   socket.on('offer', ({ to, offer }) => io.to(to).emit('offer', { from: socket.id, offer }));
   socket.on('answer', ({ to, answer }) => io.to(to).emit('answer', { from: socket.id, answer }));
   socket.on('ice-candidate', ({ to, candidate }) => io.to(to).emit('ice-candidate', { from: socket.id, candidate }));
@@ -73,6 +136,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
+    delete socketPhones[socket.id];
     console.log('User disconnected:', socket.id);
   });
 });
@@ -132,7 +196,6 @@ app.post('/api/mpesa/topup', async (req, res) => {
   }
 });
 
-// ===== M-PESA CALLBACK =====
 app.post('/api/mpesa/callback', async (req, res) => {
   try {
     const { Body } = req.body;
@@ -173,12 +236,18 @@ app.post('/api/mpesa/callback', async (req, res) => {
   }
 });
 
-// ===== BALANCE (with 5 free min for new users) =====
-const FREE_SECONDS = 300; // 5 minutes
+// ===== BALANCE =====
+const FREE_SECONDS = 300;
 
 app.get('/api/balance/:phone', async (req, res) => {
   try {
     const phone = req.params.phone;
+
+    // Check if banned first
+    if (await isBanned(phone)) {
+      return res.json({ balance: 0, new_user: false, banned: true });
+    }
+
     const { data } = await supabase
       .from('users')
       .select('balance_seconds')
@@ -186,20 +255,18 @@ app.get('/api/balance/:phone', async (req, res) => {
       .maybeSingle();
 
     if (data) {
-      // Existing user — return balance
-      res.json({ balance: data.balance_seconds, new_user: false });
+      res.json({ balance: data.balance_seconds, new_user: false, banned: false });
     } else {
-      // New user — create with 5 free minutes
       const { error: insertErr } = await supabase
         .from('users')
         .insert({ phone, balance_seconds: FREE_SECONDS });
       if (insertErr) console.error('Insert error:', insertErr);
       console.log(`🎁 New user: ${phone} → ${FREE_SECONDS} free seconds`);
-      res.json({ balance: FREE_SECONDS, new_user: true });
+      res.json({ balance: FREE_SECONDS, new_user: true, banned: false });
     }
   } catch (err) {
     console.error('Balance error:', err);
-    res.status(500).json({ balance: 0, new_user: false });
+    res.status(500).json({ balance: 0, new_user: false, banned: false });
   }
 });
 
@@ -227,6 +294,5 @@ app.post('/api/balance/deduct', async (req, res) => {
   }
 });
 
-// ===== START =====
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
