@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GlobalCall Admin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #000; color: #fff;
+    min-height: 100vh; padding: 20px;
+    letter-spacing: -0.01em;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 800; margin-bottom: 4px; letter-spacing: -0.03em; }
+  .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+
+  .login-box {
+    max-width: 380px; margin: 80px auto; text-align: center;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; padding: 32px 24px;
+  }
+  .login-box h2 { font-size: 20px; margin-bottom: 20px; }
+  input, textarea, select {
+    width: 100%; padding: 14px 16px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03);
+    color: #fff; font-size: 15px; font-family: inherit; outline: none;
+    margin-bottom: 12px;
+  }
+  input:focus { border-color: rgba(245,158,11,0.5); }
+  button {
+    width: 100%; padding: 14px; border-radius: 12px; border: none;
+    background: linear-gradient(180deg,#fbbf24,#f59e0b); color: #000;
+    font-weight: 700; font-size: 15px; font-family: inherit; cursor: pointer;
+    transition: all 0.2s;
+  }
+  button:active { transform: scale(0.98); }
+  button.danger { background: #ef4444; color: #fff; }
+  button.success { background: #22c55e; color: #fff; }
+  button.small { padding: 8px 14px; font-size: 13px; width: auto; border-radius: 10px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 18px;
+  }
+  .stat-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .stat-value { font-size: 28px; font-weight: 800; margin-top: 6px; letter-spacing: -0.03em; }
+  .stat-value.warn { color: #f87171; }
+  .stat-value.good { color: #22c55e; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px; }
+  .tab {
+    padding: 10px 16px; border-radius: 100px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+    color: #aaa; font-size: 13px; font-weight: 600; cursor: pointer;
+    white-space: nowrap; font-family: inherit;
+  }
+  .tab.active { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.4); color: #f59e0b; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .card {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 16px; margin-bottom: 10px;
+  }
+  .card-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .card-title { font-weight: 700; font-size: 15px; }
+  .card-sub { font-size: 12px; color: #888; margin-top: 4px; }
+  .card-badge {
+    display: inline-block; padding: 4px 10px; border-radius: 100px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+    background: rgba(245,158,11,0.15); color: #f59e0b;
+  }
+  .card-badge.red { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .card-badge.green { background: rgba(34,197,94,0.15); color: #22c55e; }
+
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .empty { text-align: center; padding: 40px 20px; color: #555; font-size: 14px; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(120px);
+    background: rgba(20,20,20,0.95); border: 1px solid rgba(255,255,255,0.1);
+    padding: 14px 22px; border-radius: 100px; font-size: 14px; font-weight: 600;
+    z-index: 200; transition: transform 0.4s; max-width: 90vw;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .logout { position: fixed; top: 20px; right: 20px; z-index: 100; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- LOGIN -->
+  <div id="loginView" class="login-box">
+    <h2>🔐 Admin Access</h2>
+    <input id="passwordInput" type="password" placeholder="Enter admin password" />
+    <button onclick="login()">Unlock</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashView" style="display:none;">
+    <button class="small danger logout" onclick="logout()">Logout</button>
+    <h1>GlobalCall Admin</h1>
+    <div class="sub" id="lastUpdated">Loading...</div>
+
+    <div class="stats" id="statsRow">
+      <div class="stat"><div class="stat-label">Total Users</div><div class="stat-value" id="statUsers">—</div></div>
+      <div class="stat"><div class="stat-label">Total Hours</div><div class="stat-value good" id="statHours">—</div></div>
+      <div class="stat"><div class="stat-label">Reports</div><div class="stat-value warn" id="statReports">—</div></div>
+      <div class="stat"><div class="stat-label">Banned</div><div class="stat-value warn" id="statBans">—</div></div>
+      <div class="stat"><div class="stat-label">Pending Appeals</div><div class="stat-value" id="statAppeals">—</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('users')">👥 Users</button>
+      <button class="tab" onclick="switchTab('reports')">🚨 Reports</button>
+      <button class="tab" onclick="switchTab('appeals')">📩 Appeals</button>
+      <button class="tab" onclick="switchTab('bans')">🚫 Bans</button>
+    </div>
+
+    <div id="tab-users" class="tab-content active"><div class="empty">Loading...</div></div>
+    <div id="tab-reports" class="tab-content"><div class="empty">Loading...</div></div>
+    <div id="tab-appeals" class="tab-content"><div class="empty">Loading...</div></div>
+    <div id="tab-bans" class="tab-content"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// 🔐 CHANGE THIS PASSWORD
+const ADMIN_PASSWORD = 'globalcall2026';
+
+let authToken = '';
+
+window.addEventListener('load', () => {
+  const saved = sessionStorage.getItem('gc_admin_auth');
+  if (saved) {
+    authToken = saved;
+    showDash();
+  }
+});
+
+function login() {
+  const pwd = document.getElementById('passwordInput').value;
+  if (pwd === ADMIN_PASSWORD) {
+    authToken = pwd;
+    sessionStorage.setItem('gc_admin_auth', pwd);
+    showDash();
+  } else {
+    toast('❌ Wrong password');
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('gc_admin_auth');
+  location.reload();
+}
+
+function showDash() {
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('dashView').style.display = 'block';
+  loadAll();
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+async function api(path) {
+  const res = await fetch(path, {
+    headers: { 'x-admin-auth': authToken }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function loadAll() {
+  try {
+    const stats = await api('/api/admin/stats');
+    document.getElementById('statUsers').textContent = stats.users || 0;
+    document.getElementById('statHours').textContent = Math.floor((stats.totalSeconds || 0) / 3600) + 'h';
+    document.getElementById('statReports').textContent = stats.reports || 0;
+    document.getElementById('statBans').textContent = stats.bans || 0;
+    document.getElementById('statAppeals').textContent = stats.pendingAppeals || 0;
+    document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+
+    const users = await api('/api/admin/users');
+    renderUsers(users);
+
+    const reports = await api('/api/admin/reports');
+    renderReports(reports);
+
+    const appeals = await api('/api/admin/appeals');
+    renderAppeals(appeals);
+
+    const bans = await api('/api/admin/bans');
+    renderBans(bans);
+
+  } catch (err) {
+    console.error(err);
+    toast('⚠️ Failed to load. Check auth.');
+  }
+}
+
+function renderUsers(users) {
+  const el = document.getElementById('tab-users');
+  if (!users.length) { el.innerHTML = '<div class="empty">No users yet</div>'; return; }
+  el.innerHTML = users.map(u => `
+    <div class="card">
+      <div class="card-row">
+        <div>
+          <div class="card-title">${u.phone}</div>
+          <div class="card-sub">Joined: ${new Date(u.created_at).toLocaleDateString()}</div>
+        </div>
+        <div class="card-badge ${u.balance_seconds > 60 ? 'green' : 'red'}">
+          ${Math.floor(u.balance_seconds / 60)} min
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderReports(reports) {
+  const el = document.getElementById('tab-reports');
+  if (!reports.length) { el.innerHTML = '<div class="empty">No reports yet</div>'; return; }
+  el.innerHTML = reports.slice(0, 100).map(r => `
+    <div class="card">
+      <div class="card-row">
+        <div>
+          <div class="card-title">${r.reason.toUpperCase()}</div>
+          <div class="card-sub">From: ${r.reporter_phone || '?'} → To: ${r.reported_phone || '?'}</div>
+          <div class="card-sub">${new Date(r.created_at).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAppeals(appeals) {
+  const el = document.getElementById('tab-appeals');
+  if (!appeals.length) { el.innerHTML = '<div class="empty">No appeals yet</div>'; return; }
+  el.innerHTML = appeals.map(a => `
+    <div class="card">
+      <div class="card-row">
+        <div style="flex:1;">
+          <div class="card-title">${a.phone}</div>
+          <div class="card-sub">${new Date(a.created_at).toLocaleString()}</div>
+          <div class="card-sub" style="margin-top:8px;color:#ddd;font-size:13px;line-height:1.5;">"${escapeHtml(a.message)}"</div>
+        </div>
+        <div class="card-badge ${a.status === 'pending' ? '' : 'green'}">${a.status}</div>
+      </div>
+      ${a.status === 'pending' ? `
+        <div class="actions">
+          <button class="small success" onclick="unban('${a.phone}', ${a.id})">✅ Unban User</button>
+          <button class="small danger" onclick="rejectAppeal(${a.id})">❌ Reject</button>
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+}
+
+function renderBans(bans) {
+  const el = document.getElementById('tab-bans');
+  if (!bans.length) { el.innerHTML = '<div class="empty">No bans yet</div>'; return; }
+  el.innerHTML = bans.map(b => `
+    <div class="card">
+      <div class="card-row">
+        <div>
+          <div class="card-title">${b.phone}</div>
+          <div class="card-sub">${b.reason || 'No reason'}</div>
+          <div class="card-sub">${new Date(b.banned_at).toLocaleString()}</div>
+        </div>
+        <button class="small success" onclick="unban('${b.phone}', null)">Unban</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function unban(phone, appealId) {
+  if (!confirm('Unban ' + phone + '?')) return;
+  try {
+    await fetch('/api/admin/unban', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-auth': authToken },
+      body: JSON.stringify({ phone, appealId })
+    });
+    toast('✅ Unbanned');
+    loadAll();
+  } catch (err) { toast('⚠️ Failed'); }
+}
+
+async function rejectAppeal(appealId) {
+  if (!confirm('Reject this appeal?')) return;
+  try {
+    await fetch('/api/admin/reject-appeal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-auth': authToken },
+      body: JSON.stringify({ appealId })
+    });
+    toast('Rejected');
+    loadAll();
+  } catch (err) { toast('⚠️ Failed'); }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+
+</body>
+  </html>
