@@ -34,6 +34,7 @@
   .input { width: 100%; max-width: 320px; padding: 16px 20px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.03); color: #fff; font-size: 16px; font-family: inherit; font-weight: 500; margin-bottom: 16px; text-align: center; outline: none; transition: all 0.2s; letter-spacing: 0.05em; backdrop-filter: blur(20px); }
   .input::placeholder { color: #555; font-weight: 400; letter-spacing: 0; }
   .input:focus { border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.03); box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.08); }
+  textarea.input { text-align: left; letter-spacing: 0; min-height: 120px; resize: vertical; font-size: 15px; line-height: 1.5; }
   select.input { text-align: left; letter-spacing: 0; }
   select.input option { background: #0a0a0a; color: #fff; }
   .radar { width: 180px; height: 180px; position: relative; margin-bottom: 40px; }
@@ -83,6 +84,9 @@
   .legal-links { margin-top: 24px; font-size: 12px; color: #444; letter-spacing: 0.02em; }
   .legal-links a { color: #555; text-decoration: none; margin: 0 10px; transition: color 0.2s; }
   .legal-links a:hover { color: #f59e0b; }
+  .banned-icon { font-size: 64px; margin-bottom: 20px; }
+  .banned-title { font-size: 26px; font-weight: 700; color: #ef4444; margin-bottom: 12px; }
+  .banned-text { color: #888; font-size: 14px; line-height: 1.6; max-width: 340px; margin-bottom: 24px; }
   @media (max-width: 400px) { .logo { font-size: 34px; } #localVideo { width: 88px; height: 124px; } .ctrl-btn { width: 50px; height: 50px; font-size: 20px; } .ctrl-btn.end { width: 58px; height: 58px; } }
 </style>
 </head>
@@ -91,6 +95,7 @@
 <div class="bg-glow"></div>
 <div id="bubbles"></div>
 
+<!-- AGE GATE -->
 <div id="ageGate" class="screen active">
   <div class="age-icon">🔞</div>
   <div class="logo">GlobalCall</div>
@@ -98,27 +103,22 @@
   <p style="color:#666;font-size:13px;margin-bottom:28px;max-width:300px;line-height:1.6;font-weight:500;">GlobalCall is for adults only. By continuing, you confirm you are 18 years or older.</p>
   <button class="btn btn-primary" onclick="acceptAge()">Yes, I'm 18+</button>
   <button class="btn btn-secondary" onclick="denyAge()">No, I'm under 18</button>
-  <div class="legal-links">
-    <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a>
-  </div>
+  <div class="legal-links"><a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></div>
 </div>
 
+<!-- LOGIN -->
 <div id="login" class="screen">
   <div class="logo">GlobalCall</div>
   <div class="tagline">Enter your phone to get started</div>
   <input id="phoneInput" class="input" type="tel" placeholder="254712345678" />
   <button class="btn btn-primary" onclick="login()">Continue</button>
   <p style="color:#555;font-size:12px;margin-top:20px;max-width:280px;line-height:1.6;">We use your phone number to track your balance and connect you to calls.</p>
-  <div class="legal-links">
-    <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a>
-  </div>
+  <div class="legal-links"><a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></div>
 </div>
 
+<!-- HOME -->
 <div id="home" class="screen">
-  <div class="live-counter">
-    <div class="live-pulse"></div>
-    <span id="onlineCount">1,247 online now</span>
-  </div>
+  <div class="live-counter"><div class="live-pulse"></div><span id="onlineCount">1,247 online now</span></div>
   <div class="logo">GlobalCall</div>
   <div class="tagline">Talk to the world · $1 = 1 hour</div>
   <div class="glass-card">
@@ -129,23 +129,18 @@
   <button class="btn btn-secondary" onclick="openPaywall()">➕ Add Credits</button>
   <button class="btn btn-secondary" onclick="openSettings()">⚙️ Preferences</button>
   <button class="btn btn-secondary" style="font-size:13px;padding:12px 20px;max-width:200px;margin-top:12px;color:#888;" onclick="logout()">Logout</button>
-  <div class="legal-links">
-    <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a>
-  </div>
+  <div class="legal-links"><a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></div>
 </div>
 
+<!-- SEARCHING -->
 <div id="searching" class="screen">
-  <div class="radar">
-    <div class="radar-ring"></div>
-    <div class="radar-ring"></div>
-    <div class="radar-ring"></div>
-    <div class="radar-core">🌍</div>
-  </div>
+  <div class="radar"><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-core">🌍</div></div>
   <div class="searching-title">Finding someone...</div>
   <div class="searching-sub" id="searchingText">Matching you with the world</div>
   <button class="btn btn-secondary" style="margin-top:20px" onclick="cancelSearch()">Cancel</button>
 </div>
 
+<!-- CALL -->
 <div id="call" class="screen">
   <div class="video-container">
     <video id="remoteVideo" autoplay playsinline></video>
@@ -166,6 +161,34 @@
   <div class="warning-banner" id="warningBanner">⚠️ Low balance — 1 minute left</div>
 </div>
 
+<!-- BANNED SCREEN -->
+<div id="banned" class="screen">
+  <div class="banned-icon">🚫</div>
+  <div class="banned-title">Account Banned</div>
+  <div class="banned-text">Your account has been banned for violating our Terms of Service. Multiple users reported your behavior.</div>
+  <button class="btn btn-primary" onclick="openAppeal()">📩 Appeal Ban</button>
+  <button class="btn btn-secondary" onclick="logout()">Logout</button>
+  <div class="legal-links"><a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></div>
+</div>
+
+<!-- APPEAL SCREEN -->
+<div id="appeal" class="screen">
+  <div class="logo">Appeal Ban</div>
+  <div class="tagline">Tell us why we should unban you</div>
+  <textarea id="appealMessage" class="input" placeholder="Explain what happened. Be honest — false appeals will be rejected."></textarea>
+  <button class="btn btn-primary" onclick="submitAppeal()">Submit Appeal</button>
+  <button class="btn btn-secondary" onclick="showScreen('banned')">Cancel</button>
+</div>
+
+<!-- APPEAL SENT -->
+<div id="appealSent" class="screen">
+  <div class="banned-icon">✅</div>
+  <div class="banned-title" style="color:#22c55e;">Appeal Submitted</div>
+  <div class="banned-text">We received your appeal. If approved, your account will be unbanned within 24-48 hours. You'll be notified when you next log in.</div>
+  <button class="btn btn-secondary" onclick="logout()">Close</button>
+</div>
+
+<!-- PAYWALL -->
 <div class="modal-bg" id="paywall">
   <div class="modal">
     <h2>Add Credits</h2>
@@ -177,6 +200,7 @@
   </div>
 </div>
 
+<!-- REPORT -->
 <div class="modal-bg" id="reportModal">
   <div class="modal">
     <h2>Report User</h2>
@@ -189,6 +213,7 @@
   </div>
 </div>
 
+<!-- SETTINGS -->
 <div class="modal-bg" id="settingsModal">
   <div class="modal">
     <h2>Preferences</h2>
@@ -271,11 +296,7 @@ const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   {
-    urls: [
-      'turn:globalcall.metered.live:80',
-      'turn:globalcall.metered.live:443',
-      'turn:globalcall.metered.live:443?transport=tcp'
-    ],
+    urls: ['turn:globalcall.metered.live:80','turn:globalcall.metered.live:443','turn:globalcall.metered.live:443?transport=tcp'],
     username: 'globalcall',
     credential: TURN_KEY
   }
@@ -301,280 +322,3 @@ window.addEventListener('load', () => {
 
 function acceptAge() {
   localStorage.setItem('gc_age_ok', '1');
-  const saved = localStorage.getItem('gc_phone');
-  if (saved) { state.phone = saved; loadBalance(); showScreen('home'); }
-  else { showScreen('login'); }
-}
-
-function denyAge() {
-  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;color:#fff;font-family:Inter,sans-serif;background:#000;"><div><h1 style="font-size:26px;margin-bottom:12px;font-weight:700;">Sorry</h1><p style="color:#666;line-height:1.6;">GlobalCall is for adults only (18+).</p></div></div>';
-}
-
-async function login() {
-  let phone = document.getElementById('phoneInput').value.trim();
-  phone = phone.replace(/\D/g, '');
-  if (phone.startsWith('0')) phone = '254' + phone.slice(1);
-  if (!phone.startsWith('254') && phone.length === 9) phone = '254' + phone;
-  if (phone.length !== 12) { toast('⚠️ Enter a valid Safaricom number'); return; }
-  state.phone = phone;
-  localStorage.setItem('gc_phone', phone);
-  await loadBalance();
-  showScreen('home');
-  toast('✅ Welcome back');
-}
-
-function logout() {
-  localStorage.removeItem('gc_phone');
-  state.phone = null; state.balanceSeconds = 0;
-  location.reload();
-}
-
-async function loadBalance() {
-  try {
-    const res = await fetch('/api/balance/' + state.phone);
-    const data = await res.json();
-
-    if (data.banned) {
-      showBannedScreen();
-      return;
-    }
-
-    state.balanceSeconds = data.balance || 0;
-    updateBalanceDisplay();
-    if (data.new_user) {
-      setTimeout(() => toast('🎁 You got 5 free minutes!'), 600);
-    }
-
-    // Register phone with server for report tracking
-    socket.emit('register-phone', state.phone);
-  } catch (err) { console.error(err); }
-}
-
-function updateBalanceDisplay() {
-  const mins = Math.floor(state.balanceSeconds / 60);
-  const el = document.getElementById('balanceDisplay');
-  if (!el) return;
-  el.textContent = mins + ' min';
-  el.classList.toggle('low', mins < 2);
-}
-
-function hasBalance() { return state.balanceSeconds > 0; }
-
-function showBannedScreen() {
-  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;color:#fff;font-family:Inter,sans-serif;background:#000;"><div style="max-width:400px;"><div style="font-size:60px;margin-bottom:20px;">🚫</div><h1 style="font-size:26px;margin-bottom:12px;font-weight:700;color:#ef4444;">Account Banned</h1><p style="color:#888;line-height:1.6;margin-bottom:20px;">Your account has been banned for violating our Terms of Service. Multiple users reported your behavior.</p><p style="color:#666;font-size:13px;">Questions? Contact: devandenxce@gmail.com</p></div></div>';
-}
-
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-
-function openSettings() {
-  document.getElementById('prefLang').value = localStorage.getItem('gc_pref_lang') || 'any';
-  document.getElementById('prefCountry').value = localStorage.getItem('gc_pref_country') || 'any';
-  document.getElementById('settingsModal').classList.add('active');
-}
-function closeSettings() { document.getElementById('settingsModal').classList.remove('active'); }
-function saveSettings() {
-  localStorage.setItem('gc_pref_lang', document.getElementById('prefLang').value);
-  localStorage.setItem('gc_pref_country', document.getElementById('prefCountry').value);
-  closeSettings();
-  toast('✅ Preferences saved');
-}
-
-async function startMatch() {
-  if (!hasBalance()) { openPaywall(); toast('Add credits first'); return; }
-  try {
-    state.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    document.getElementById('localVideo').srcObject = state.localStream;
-  } catch (err) { toast('⚠️ Allow camera & mic access'); return; }
-  showScreen('searching');
-  socket.emit('start-match', {
-    lang: localStorage.getItem('gc_pref_lang') || 'any',
-    country: localStorage.getItem('gc_pref_country') || 'any'
-  });
-}
-
-socket.on('waiting', () => { document.getElementById('searchingText').textContent = 'Waiting for a match...'; });
-socket.on('match-found', async ({ partnerId, initiator }) => {
-  state.currentPartner = partnerId;
-  showScreen('call');
-  await startCall(partnerId, initiator);
-});
-
-async function startCall(partnerId, initiator) {
-  state.isCalling = true;
-  state.callSeconds = 0;
-
-  state.peerConnection = new RTCPeerConnection({
-    iceServers: ICE_SERVERS,
-    iceTransportPolicy: 'all'
-  });
-
-  state.localStream.getTracks().forEach(t => state.peerConnection.addTrack(t, state.localStream));
-  state.peerConnection.ontrack = (event) => { document.getElementById('remoteVideo').srcObject = event.streams[0]; };
-  state.peerConnection.onicecandidate = (event) => {
-    if (event.candidate) socket.emit('ice-candidate', { to: partnerId, candidate: event.candidate });
-  };
-
-  if (initiator) {
-    const offer = await state.peerConnection.createOffer();
-    await state.peerConnection.setLocalDescription(offer);
-    socket.emit('offer', { to: partnerId, offer });
-  }
-  startBilling();
-}
-
-socket.on('offer', async ({ from, offer }) => {
-  state.currentPartner = from;
-  if (!state.peerConnection) await startCall(from, false);
-  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await state.peerConnection.createAnswer();
-  await state.peerConnection.setLocalDescription(answer);
-  socket.emit('answer', { to: from, answer });
-});
-
-socket.on('answer', async ({ answer }) => {
-  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-});
-
-socket.on('ice-candidate', async ({ candidate }) => {
-  if (state.peerConnection && candidate) {
-    try { await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
-    catch (e) { console.error(e); }
-  }
-});
-
-socket.on('partner-left', () => { toast('Partner left'); endCall(); });
-
-socket.on('banned', () => {
-  if (state.localStream) state.localStream.getTracks().forEach(t => t.stop());
-  if (state.peerConnection) state.peerConnection.close();
-  showBannedScreen();
-});
-
-function startBilling() {
-  state.timerInterval = setInterval(() => {
-    state.callSeconds++;
-    const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
-    const s = String(state.callSeconds % 60).padStart(2, '0');
-    document.getElementById('callTimer').textContent = `${m}:${s}`;
-  }, 1000);
-
-  state.billingInterval = setInterval(() => {
-    if (state.balanceSeconds <= 0) { endCall(); toast('💰 Balance empty'); openPaywall(); return; }
-    state.balanceSeconds--;
-    updateBalanceDisplay();
-    if (state.balanceSeconds === 60) {
-      const b = document.getElementById('warningBanner');
-      b.classList.add('show');
-      setTimeout(() => b.classList.remove('show'), 5000);
-    }
-  }, 1000);
-}
-
-async function endCall() {
-  if (!state.isCalling) return;
-  state.isCalling = false;
-  const used = state.callSeconds;
-  clearInterval(state.timerInterval);
-  clearInterval(state.billingInterval);
-
-  if (state.currentPartner) socket.emit('end-call', { to: state.currentPartner });
-  if (state.localStream) { state.localStream.getTracks().forEach(t => t.stop()); state.localStream = null; }
-  if (state.peerConnection) { state.peerConnection.close(); state.peerConnection = null; }
-
-  if (used > 0 && state.phone) {
-    try {
-      await fetch('/api/balance/deduct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: state.phone, seconds: used })
-      });
-      await loadBalance();
-    } catch (e) { console.error(e); }
-  }
-
-  document.getElementById('remoteVideo').srcObject = null;
-  document.getElementById('localVideo').srcObject = null;
-  document.getElementById('callTimer').textContent = '00:00';
-  document.getElementById('warningBanner').classList.remove('show');
-  document.getElementById('muteBtn').classList.remove('muted');
-  document.getElementById('camBtn').classList.remove('muted');
-  state.currentPartner = null; state.callSeconds = 0;
-  showScreen('home');
-}
-
-function cancelSearch() { showScreen('home'); }
-
-function toggleMute() {
-  if (!state.localStream) return;
-  state.isMuted = !state.isMuted;
-  state.localStream.getAudioTracks().forEach(t => t.enabled = !state.isMuted);
-  document.getElementById('muteBtn').classList.toggle('muted', state.isMuted);
-}
-
-function toggleCam() {
-  if (!state.localStream) return;
-  state.isCamOff = !state.isCamOff;
-  state.localStream.getVideoTracks().forEach(t => t.enabled = !state.isCamOff);
-  document.getElementById('camBtn').classList.toggle('muted', state.isCamOff);
-}
-
-function openReport() { document.getElementById('reportModal').classList.add('active'); }
-function closeReport() { document.getElementById('reportModal').classList.remove('active'); }
-function submitReport(reason) {
-  if (state.currentPartner) {
-    socket.emit('report-user', {
-      reportedSocket: state.currentPartner,
-      reason: reason
-    });
-  }
-  closeReport();
-  toast('✅ Report sent. Thanks!');
-  endCall();
-}
-
-function openPaywall() { document.getElementById('paywall').classList.add('active'); }
-function closePaywall() { document.getElementById('paywall').classList.remove('active'); }
-
-async function buyPack(hours, bonus) {
-  const phone = state.phone;
-  if (!phone) { toast('Login first'); return; }
-  const amount = hours * 130;
-  toast('📱 Sending M-Pesa request...');
-  try {
-    const res = await fetch('/api/mpesa/topup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, amount })
-    });
-    const data = await res.json();
-    if (data.CheckoutRequestID || data.ResponseCode === '0') {
-      toast('✅ Check your phone for M-Pesa');
-      closePaywall();
-      setTimeout(loadBalance, 15000);
-      setTimeout(loadBalance, 30000);
-    } else {
-      toast('⚠️ Payment failed. Try again.');
-      console.error(data);
-    }
-  } catch (err) { console.error(err); toast('⚠️ Network error'); }
-}
-
-let toastTimer;
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
-}
-
-window.addEventListener('beforeunload', () => {
-  if (state.localStream) state.localStream.getTracks().forEach(t => t.stop());
-});
-</script>
-
-</body>
-</html>
