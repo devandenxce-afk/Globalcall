@@ -17,10 +17,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// ===== SMART MATCHING =====
 let waitingUsers = [];
-
-// Map socket IDs to phone numbers (for reporting)
 const socketPhones = {};
 
 function isCompatible(a, b) {
@@ -57,31 +54,28 @@ io.on('connection', (socket) => {
   });
 
   socket.on('start-match', async (prefs) => {
-    // Check if banned
     const phone = socketPhones[socket.id];
     if (phone && await isBanned(phone)) {
       socket.emit('banned');
       return;
     }
-
     const userPrefs = {
       lang: prefs?.lang || 'any',
       country: prefs?.country || 'any'
     };
     const newUser = { id: socket.id, prefs: userPrefs, joinedAt: Date.now() };
     const matchIndex = findMatch(newUser);
-
     if (matchIndex !== -1) {
       const partner = waitingUsers.splice(matchIndex, 1)[0];
       socket.join(partner.id);
       io.to(partner.id).emit('match-found', { partnerId: socket.id, initiator: true });
       socket.emit('match-found', { partnerId: partner.id, initiator: false });
-      console.log(`🤝 Matched: ${partner.id} ↔ ${socket.id}`);
+      console.log(`Matched: ${partner.id} <-> ${socket.id}`);
     } else {
       waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
       waitingUsers.push(newUser);
       socket.emit('waiting');
-      console.log(`⏳ Waiting: ${socket.id} queue=${waitingUsers.length}`);
+      console.log(`Waiting: ${socket.id} queue=${waitingUsers.length}`);
     }
   });
 
@@ -89,46 +83,34 @@ io.on('connection', (socket) => {
     waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
   });
 
-  // ===== REPORT =====
   socket.on('report-user', async ({ reportedSocket, reason }) => {
     const reporterPhone = socketPhones[socket.id];
     const reportedPhone = socketPhones[reportedSocket];
-
-    console.log(`🚨 Report: ${reporterPhone} → ${reportedPhone || reportedSocket} (${reason})`);
-
-    // Save report
+    console.log(`Report: ${reporterPhone} -> ${reportedPhone || reportedSocket} (${reason})`);
     await supabase.from('reports').insert({
       reporter_phone: reporterPhone || 'unknown',
       reported_phone: reportedPhone || null,
       reported_socket: reportedSocket || null,
       reason: reason
     });
-
-    // Count reports on this user
     if (reportedPhone) {
       const { data: userReports } = await supabase
         .from('reports')
         .select('id')
         .eq('reported_phone', reportedPhone);
-
       const count = userReports?.length || 0;
-      console.log(`📊 ${reportedPhone} now has ${count} reports`);
-
-      // Auto-ban at 3+ reports
+      console.log(`${reportedPhone} now has ${count} reports`);
       if (count >= 3) {
         await supabase.from('bans').insert({
           phone: reportedPhone,
           reason: `Auto-banned after ${count} reports`
         });
-        console.log(`🚫 BANNED: ${reportedPhone}`);
-
-        // Kick them from any ongoing call
+        console.log(`BANNED: ${reportedPhone}`);
         io.to(reportedSocket).emit('banned');
       }
     }
   });
 
-  // ===== WebRTC SIGNALING =====
   socket.on('offer', ({ to, offer }) => io.to(to).emit('offer', { from: socket.id, offer }));
   socket.on('answer', ({ to, answer }) => io.to(to).emit('answer', { from: socket.id, answer }));
   socket.on('ice-candidate', ({ to, candidate }) => io.to(to).emit('ice-candidate', { from: socket.id, candidate }));
@@ -141,7 +123,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// ===== M-PESA =====
 async function getMpesaToken() {
   const auth = Buffer.from(
     `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
@@ -161,15 +142,12 @@ app.post('/api/mpesa/topup', async (req, res) => {
     if (!cleanPhone.startsWith('254') && cleanPhone.length === 9) {
       cleanPhone = '254' + cleanPhone;
     }
-
     const token = await getMpesaToken();
     const eat = new Date(Date.now() + 3 * 60 * 60 * 1000);
     const timestamp = eat.toISOString().replace(/\D/g, '').slice(0, 14);
-
     const password = Buffer.from(
       `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
     ).toString('base64');
-
     const response = await axios.post(
       'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
       {
@@ -187,12 +165,11 @@ app.post('/api/mpesa/topup', async (req, res) => {
       },
       { headers: { Authorization: `Bearer ${token}` } }
     );
-
-    console.log('✅ STK Push sent:', response.data);
+    console.log('STK Push sent:', response.data);
     res.json(response.data);
   } catch (error) {
-    console.error('❌ M-Pesa error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Payment initiation failed', details: error.response?.data });
+    console.error('M-Pesa error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Payment failed' });
   }
 });
 
@@ -201,33 +178,25 @@ app.post('/api/mpesa/callback', async (req, res) => {
     const { Body } = req.body;
     const callback = Body?.stkCallback;
     if (!callback) return res.json({ ResultCode: 0, ResultDesc: 'No callback' });
-
     if (callback.ResultCode === 0) {
       const items = callback.CallbackMetadata.Item;
       const amount = items.find(i => i.Name === 'Amount')?.Value;
       const phone = String(items.find(i => i.Name === 'PhoneNumber')?.Value);
       const creditsSeconds = Math.floor(amount * (3600 / 130));
-
-      console.log(`💰 Payment: ${phone} paid ${amount} KES → ${creditsSeconds} sec`);
-
+      console.log(`Payment: ${phone} paid ${amount} KES -> ${creditsSeconds} sec`);
       const { data: existing } = await supabase
         .from('users')
         .select('*')
         .eq('phone', phone)
         .maybeSingle();
-
       if (existing) {
         await supabase
           .from('users')
           .update({ balance_seconds: existing.balance_seconds + creditsSeconds })
           .eq('phone', phone);
       } else {
-        await supabase
-          .from('users')
-          .insert({ phone, balance_seconds: creditsSeconds });
+        await supabase.from('users').insert({ phone, balance_seconds: creditsSeconds });
       }
-    } else {
-      console.log('❌ Payment failed:', callback.ResultDesc);
     }
     res.json({ ResultCode: 0, ResultDesc: 'Success' });
   } catch (err) {
@@ -236,32 +205,24 @@ app.post('/api/mpesa/callback', async (req, res) => {
   }
 });
 
-// ===== BALANCE =====
 const FREE_SECONDS = 300;
 
 app.get('/api/balance/:phone', async (req, res) => {
   try {
     const phone = req.params.phone;
-
-    // Check if banned first
     if (await isBanned(phone)) {
       return res.json({ balance: 0, new_user: false, banned: true });
     }
-
     const { data } = await supabase
       .from('users')
       .select('balance_seconds')
       .eq('phone', phone)
       .maybeSingle();
-
     if (data) {
       res.json({ balance: data.balance_seconds, new_user: false, banned: false });
     } else {
-      const { error: insertErr } = await supabase
-        .from('users')
-        .insert({ phone, balance_seconds: FREE_SECONDS });
-      if (insertErr) console.error('Insert error:', insertErr);
-      console.log(`🎁 New user: ${phone} → ${FREE_SECONDS} free seconds`);
+      await supabase.from('users').insert({ phone, balance_seconds: FREE_SECONDS });
+      console.log(`New user: ${phone} -> ${FREE_SECONDS} free seconds`);
       res.json({ balance: FREE_SECONDS, new_user: true, banned: false });
     }
   } catch (err) {
@@ -278,7 +239,6 @@ app.post('/api/balance/deduct', async (req, res) => {
       .select('balance_seconds')
       .eq('phone', phone)
       .maybeSingle();
-
     if (user) {
       const newBalance = Math.max(0, user.balance_seconds - seconds);
       await supabase
@@ -291,6 +251,27 @@ app.post('/api/balance/deduct', async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ balance: 0 });
+  }
+});
+
+// ===== APPEALS =====
+app.post('/api/appeal', async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message || message.length < 10) {
+      return res.status(400).json({ error: 'Invalid appeal' });
+    }
+    const { error } = await supabase.from('appeals').insert({
+      phone: phone,
+      message: message,
+      status: 'pending'
+    });
+    if (error) throw error;
+    console.log(`Appeal submitted: ${phone}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Appeal error:', err);
+    res.status(500).json({ error: 'Failed to submit appeal' });
   }
 });
 
