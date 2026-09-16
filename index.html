@@ -355,4 +355,226 @@ function updateBalanceDisplay() {
   const el = document.getElementById('balanceDisplay');
   if (!el) return;
   el.textContent = mins + ' min';
-  el.classList.toggle('low', mins
+  el.classList.toggle('low', mins < 2);
+}
+
+function hasBalance() { return state.balanceSeconds > 0; }
+
+function showBannedScreen() {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;text-align:center;color:#fff;font-family:Inter,sans-serif;background:#000;"><div style="max-width:400px;"><div style="font-size:60px;margin-bottom:20px;">🚫</div><h1 style="font-size:26px;margin-bottom:12px;font-weight:700;color:#ef4444;">Account Banned</h1><p style="color:#888;line-height:1.6;margin-bottom:20px;">Your account has been banned for violating our Terms of Service. Multiple users reported your behavior.</p><p style="color:#666;font-size:13px;">Questions? Contact: devandenxce@gmail.com</p></div></div>';
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function openSettings() {
+  document.getElementById('prefLang').value = localStorage.getItem('gc_pref_lang') || 'any';
+  document.getElementById('prefCountry').value = localStorage.getItem('gc_pref_country') || 'any';
+  document.getElementById('settingsModal').classList.add('active');
+}
+function closeSettings() { document.getElementById('settingsModal').classList.remove('active'); }
+function saveSettings() {
+  localStorage.setItem('gc_pref_lang', document.getElementById('prefLang').value);
+  localStorage.setItem('gc_pref_country', document.getElementById('prefCountry').value);
+  closeSettings();
+  toast('✅ Preferences saved');
+}
+
+async function startMatch() {
+  if (!hasBalance()) { openPaywall(); toast('Add credits first'); return; }
+  try {
+    state.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    document.getElementById('localVideo').srcObject = state.localStream;
+  } catch (err) { toast('⚠️ Allow camera & mic access'); return; }
+  showScreen('searching');
+  socket.emit('start-match', {
+    lang: localStorage.getItem('gc_pref_lang') || 'any',
+    country: localStorage.getItem('gc_pref_country') || 'any'
+  });
+}
+
+socket.on('waiting', () => { document.getElementById('searchingText').textContent = 'Waiting for a match...'; });
+socket.on('match-found', async ({ partnerId, initiator }) => {
+  state.currentPartner = partnerId;
+  showScreen('call');
+  await startCall(partnerId, initiator);
+});
+
+async function startCall(partnerId, initiator) {
+  state.isCalling = true;
+  state.callSeconds = 0;
+
+  state.peerConnection = new RTCPeerConnection({
+    iceServers: ICE_SERVERS,
+    iceTransportPolicy: 'all'
+  });
+
+  state.localStream.getTracks().forEach(t => state.peerConnection.addTrack(t, state.localStream));
+  state.peerConnection.ontrack = (event) => { document.getElementById('remoteVideo').srcObject = event.streams[0]; };
+  state.peerConnection.onicecandidate = (event) => {
+    if (event.candidate) socket.emit('ice-candidate', { to: partnerId, candidate: event.candidate });
+  };
+
+  if (initiator) {
+    const offer = await state.peerConnection.createOffer();
+    await state.peerConnection.setLocalDescription(offer);
+    socket.emit('offer', { to: partnerId, offer });
+  }
+  startBilling();
+}
+
+socket.on('offer', async ({ from, offer }) => {
+  state.currentPartner = from;
+  if (!state.peerConnection) await startCall(from, false);
+  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await state.peerConnection.createAnswer();
+  await state.peerConnection.setLocalDescription(answer);
+  socket.emit('answer', { to: from, answer });
+});
+
+socket.on('answer', async ({ answer }) => {
+  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+socket.on('ice-candidate', async ({ candidate }) => {
+  if (state.peerConnection && candidate) {
+    try { await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch (e) { console.error(e); }
+  }
+});
+
+socket.on('partner-left', () => { toast('Partner left'); endCall(); });
+
+socket.on('banned', () => {
+  if (state.localStream) state.localStream.getTracks().forEach(t => t.stop());
+  if (state.peerConnection) state.peerConnection.close();
+  showBannedScreen();
+});
+
+function startBilling() {
+  state.timerInterval = setInterval(() => {
+    state.callSeconds++;
+    const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
+    const s = String(state.callSeconds % 60).padStart(2, '0');
+    document.getElementById('callTimer').textContent = `${m}:${s}`;
+  }, 1000);
+
+  state.billingInterval = setInterval(() => {
+    if (state.balanceSeconds <= 0) { endCall(); toast('💰 Balance empty'); openPaywall(); return; }
+    state.balanceSeconds--;
+    updateBalanceDisplay();
+    if (state.balanceSeconds === 60) {
+      const b = document.getElementById('warningBanner');
+      b.classList.add('show');
+      setTimeout(() => b.classList.remove('show'), 5000);
+    }
+  }, 1000);
+}
+
+async function endCall() {
+  if (!state.isCalling) return;
+  state.isCalling = false;
+  const used = state.callSeconds;
+  clearInterval(state.timerInterval);
+  clearInterval(state.billingInterval);
+
+  if (state.currentPartner) socket.emit('end-call', { to: state.currentPartner });
+  if (state.localStream) { state.localStream.getTracks().forEach(t => t.stop()); state.localStream = null; }
+  if (state.peerConnection) { state.peerConnection.close(); state.peerConnection = null; }
+
+  if (used > 0 && state.phone) {
+    try {
+      await fetch('/api/balance/deduct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: state.phone, seconds: used })
+      });
+      await loadBalance();
+    } catch (e) { console.error(e); }
+  }
+
+  document.getElementById('remoteVideo').srcObject = null;
+  document.getElementById('localVideo').srcObject = null;
+  document.getElementById('callTimer').textContent = '00:00';
+  document.getElementById('warningBanner').classList.remove('show');
+  document.getElementById('muteBtn').classList.remove('muted');
+  document.getElementById('camBtn').classList.remove('muted');
+  state.currentPartner = null; state.callSeconds = 0;
+  showScreen('home');
+}
+
+function cancelSearch() { showScreen('home'); }
+
+function toggleMute() {
+  if (!state.localStream) return;
+  state.isMuted = !state.isMuted;
+  state.localStream.getAudioTracks().forEach(t => t.enabled = !state.isMuted);
+  document.getElementById('muteBtn').classList.toggle('muted', state.isMuted);
+}
+
+function toggleCam() {
+  if (!state.localStream) return;
+  state.isCamOff = !state.isCamOff;
+  state.localStream.getVideoTracks().forEach(t => t.enabled = !state.isCamOff);
+  document.getElementById('camBtn').classList.toggle('muted', state.isCamOff);
+}
+
+function openReport() { document.getElementById('reportModal').classList.add('active'); }
+function closeReport() { document.getElementById('reportModal').classList.remove('active'); }
+function submitReport(reason) {
+  if (state.currentPartner) {
+    socket.emit('report-user', {
+      reportedSocket: state.currentPartner,
+      reason: reason
+    });
+  }
+  closeReport();
+  toast('✅ Report sent. Thanks!');
+  endCall();
+}
+
+function openPaywall() { document.getElementById('paywall').classList.add('active'); }
+function closePaywall() { document.getElementById('paywall').classList.remove('active'); }
+
+async function buyPack(hours, bonus) {
+  const phone = state.phone;
+  if (!phone) { toast('Login first'); return; }
+  const amount = hours * 130;
+  toast('📱 Sending M-Pesa request...');
+  try {
+    const res = await fetch('/api/mpesa/topup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, amount })
+    });
+    const data = await res.json();
+    if (data.CheckoutRequestID || data.ResponseCode === '0') {
+      toast('✅ Check your phone for M-Pesa');
+      closePaywall();
+      setTimeout(loadBalance, 15000);
+      setTimeout(loadBalance, 30000);
+    } else {
+      toast('⚠️ Payment failed. Try again.');
+      console.error(data);
+    }
+  } catch (err) { console.error(err); toast('⚠️ Network error'); }
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+window.addEventListener('beforeunload', () => {
+  if (state.localStream) state.localStream.getTracks().forEach(t => t.stop());
+});
+</script>
+
+</body>
+</html>
