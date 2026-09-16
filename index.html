@@ -13,7 +13,7 @@
   .bg-glow { position: fixed; inset: 0; background: radial-gradient(circle at 20% 0%, rgba(245, 158, 11, 0.12), transparent 45%), radial-gradient(circle at 80% 100%, rgba(245, 158, 11, 0.08), transparent 45%), radial-gradient(circle at 50% 50%, rgba(102, 126, 234, 0.05), transparent 60%); pointer-events: none; z-index: 0; animation: breathe 8s ease-in-out infinite; }
   @keyframes breathe { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
   .bubble { position: fixed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2); z-index: 0; pointer-events: none; opacity: 0.65; }
-  .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0; z-index: 1; }
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; opacity: 0; z-index: 1; overflow-y: auto; }
   .screen.active { display: flex; opacity: 1; animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
   .logo { font-size: 42px; font-weight: 800; letter-spacing: -0.04em; background: linear-gradient(180deg, #fff 0%, #999 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 6px; position: relative; }
@@ -80,6 +80,9 @@
   .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(120px); background: rgba(20, 20, 20, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); padding: 14px 22px; border-radius: 100px; font-size: 14px; font-weight: 600; z-index: 200; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); white-space: nowrap; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
   .toast.show { transform: translateX(-50%) translateY(0); }
   .age-icon { width: 80px; height: 80px; border-radius: 50%; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); display: flex; align-items: center; justify-content: center; font-size: 36px; margin-bottom: 24px; }
+  .legal-links { margin-top: 24px; font-size: 12px; color: #444; letter-spacing: 0.02em; }
+  .legal-links a { color: #555; text-decoration: none; margin: 0 10px; transition: color 0.2s; }
+  .legal-links a:hover { color: #f59e0b; }
   @media (max-width: 400px) { .logo { font-size: 34px; } #localVideo { width: 88px; height: 124px; } .ctrl-btn { width: 50px; height: 50px; font-size: 20px; } .ctrl-btn.end { width: 58px; height: 58px; } }
 </style>
 </head>
@@ -95,6 +98,9 @@
   <p style="color:#666;font-size:13px;margin-bottom:28px;max-width:300px;line-height:1.6;font-weight:500;">GlobalCall is for adults only. By continuing, you confirm you are 18 years or older.</p>
   <button class="btn btn-primary" onclick="acceptAge()">Yes, I'm 18+</button>
   <button class="btn btn-secondary" onclick="denyAge()">No, I'm under 18</button>
+  <div class="legal-links">
+    <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a>
+  </div>
 </div>
 
 <div id="login" class="screen">
@@ -103,6 +109,9 @@
   <input id="phoneInput" class="input" type="tel" placeholder="254712345678" />
   <button class="btn btn-primary" onclick="login()">Continue</button>
   <p style="color:#555;font-size:12px;margin-top:20px;max-width:280px;line-height:1.6;">We use your phone number to track your balance and connect you to calls.</p>
+  <div class="legal-links">
+    <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a>
+  </div>
 </div>
 
 <div id="home" class="screen">
@@ -120,6 +129,9 @@
   <button class="btn btn-secondary" onclick="openPaywall()">➕ Add Credits</button>
   <button class="btn btn-secondary" onclick="openSettings()">⚙️ Preferences</button>
   <button class="btn btn-secondary" style="font-size:13px;padding:12px 20px;max-width:200px;margin-top:12px;color:#888;" onclick="logout()">Logout</button>
+  <div class="legal-links">
+    <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a>
+  </div>
 </div>
 
 <div id="searching" class="screen">
@@ -216,7 +228,6 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== FLOATING AVATAR BUBBLES =====
 (function createBubbles() {
   const container = document.getElementById('bubbles');
   const flags = ['🇰🇪','🇳🇬','🇿🇦','🇺🇸','🇬🇧','🇮🇳','🇧🇷','🇯🇵','🇩🇪','🇫🇷','🇨🇦','🇦🇺','🇲🇽','🇪🇸','🇮🇹','🇰🇷'];
@@ -244,7 +255,6 @@
   }
 })();
 
-// ===== LIVE COUNTER =====
 (function liveCounter() {
   const el = document.getElementById('onlineCount');
   let count = 1200 + Math.floor(Math.random() * 300);
@@ -256,8 +266,6 @@
   }, 3000);
 })();
 
-// ===== TURN SERVER CONFIG =====
-// 🔐 Replace YOUR_TURN_KEY_HERE with your Metered Secret Key
 const TURN_KEY = 'YOUR_TURN_KEY_HERE';
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -344,205 +352,4 @@ function updateBalanceDisplay() {
 function hasBalance() { return state.balanceSeconds > 0; }
 
 function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-
-function openSettings() {
-  document.getElementById('prefLang').value = localStorage.getItem('gc_pref_lang') || 'any';
-  document.getElementById('prefCountry').value = localStorage.getItem('gc_pref_country') || 'any';
-  document.getElementById('settingsModal').classList.add('active');
-}
-function closeSettings() { document.getElementById('settingsModal').classList.remove('active'); }
-function saveSettings() {
-  localStorage.setItem('gc_pref_lang', document.getElementById('prefLang').value);
-  localStorage.setItem('gc_pref_country', document.getElementById('prefCountry').value);
-  closeSettings();
-  toast('✅ Preferences saved');
-}
-
-async function startMatch() {
-  if (!hasBalance()) { openPaywall(); toast('Add credits first'); return; }
-  try {
-    state.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    document.getElementById('localVideo').srcObject = state.localStream;
-  } catch (err) { toast('⚠️ Allow camera & mic access'); return; }
-  showScreen('searching');
-  socket.emit('start-match', {
-    lang: localStorage.getItem('gc_pref_lang') || 'any',
-    country: localStorage.getItem('gc_pref_country') || 'any'
-  });
-}
-
-socket.on('waiting', () => { document.getElementById('searchingText').textContent = 'Waiting for a match...'; });
-socket.on('match-found', async ({ partnerId, initiator }) => {
-  state.currentPartner = partnerId;
-  showScreen('call');
-  await startCall(partnerId, initiator);
-});
-
-async function startCall(partnerId, initiator) {
-  state.isCalling = true;
-  state.callSeconds = 0;
-
-  state.peerConnection = new RTCPeerConnection({
-    iceServers: ICE_SERVERS,
-    iceTransportPolicy: 'all'
-  });
-
-  state.localStream.getTracks().forEach(t => state.peerConnection.addTrack(t, state.localStream));
-  state.peerConnection.ontrack = (event) => { document.getElementById('remoteVideo').srcObject = event.streams[0]; };
-  state.peerConnection.onicecandidate = (event) => {
-    if (event.candidate) socket.emit('ice-candidate', { to: partnerId, candidate: event.candidate });
-  };
-
-  if (initiator) {
-    const offer = await state.peerConnection.createOffer();
-    await state.peerConnection.setLocalDescription(offer);
-    socket.emit('offer', { to: partnerId, offer });
-  }
-  startBilling();
-}
-
-socket.on('offer', async ({ from, offer }) => {
-  state.currentPartner = from;
-  if (!state.peerConnection) await startCall(from, false);
-  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await state.peerConnection.createAnswer();
-  await state.peerConnection.setLocalDescription(answer);
-  socket.emit('answer', { to: from, answer });
-});
-
-socket.on('answer', async ({ answer }) => {
-  await state.peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-});
-
-socket.on('ice-candidate', async ({ candidate }) => {
-  if (state.peerConnection && candidate) {
-    try { await state.peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
-    catch (e) { console.error(e); }
-  }
-});
-
-socket.on('partner-left', () => { toast('Partner left'); endCall(); });
-
-function startBilling() {
-  state.timerInterval = setInterval(() => {
-    state.callSeconds++;
-    const m = String(Math.floor(state.callSeconds / 60)).padStart(2, '0');
-    const s = String(state.callSeconds % 60).padStart(2, '0');
-    document.getElementById('callTimer').textContent = `${m}:${s}`;
-  }, 1000);
-
-  state.billingInterval = setInterval(() => {
-    if (state.balanceSeconds <= 0) { endCall(); toast('💰 Balance empty'); openPaywall(); return; }
-    state.balanceSeconds--;
-    updateBalanceDisplay();
-    if (state.balanceSeconds === 60) {
-      const b = document.getElementById('warningBanner');
-      b.classList.add('show');
-      setTimeout(() => b.classList.remove('show'), 5000);
-    }
-  }, 1000);
-}
-
-async function endCall() {
-  if (!state.isCalling) return;
-  state.isCalling = false;
-  const used = state.callSeconds;
-  clearInterval(state.timerInterval);
-  clearInterval(state.billingInterval);
-
-  if (state.currentPartner) socket.emit('end-call', { to: state.currentPartner });
-  if (state.localStream) { state.localStream.getTracks().forEach(t => t.stop()); state.localStream = null; }
-  if (state.peerConnection) { state.peerConnection.close(); state.peerConnection = null; }
-
-  if (used > 0 && state.phone) {
-    try {
-      await fetch('/api/balance/deduct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: state.phone, seconds: used })
-      });
-      await loadBalance();
-    } catch (e) { console.error(e); }
-  }
-
-  document.getElementById('remoteVideo').srcObject = null;
-  document.getElementById('localVideo').srcObject = null;
-  document.getElementById('callTimer').textContent = '00:00';
-  document.getElementById('warningBanner').classList.remove('show');
-  document.getElementById('muteBtn').classList.remove('muted');
-  document.getElementById('camBtn').classList.remove('muted');
-  state.currentPartner = null; state.callSeconds = 0;
-  showScreen('home');
-}
-
-function cancelSearch() { showScreen('home'); }
-
-function toggleMute() {
-  if (!state.localStream) return;
-  state.isMuted = !state.isMuted;
-  state.localStream.getAudioTracks().forEach(t => t.enabled = !state.isMuted);
-  document.getElementById('muteBtn').classList.toggle('muted', state.isMuted);
-}
-
-function toggleCam() {
-  if (!state.localStream) return;
-  state.isCamOff = !state.isCamOff;
-  state.localStream.getVideoTracks().forEach(t => t.enabled = !state.isCamOff);
-  document.getElementById('camBtn').classList.toggle('muted', state.isCamOff);
-}
-
-function openReport() { document.getElementById('reportModal').classList.add('active'); }
-function closeReport() { document.getElementById('reportModal').classList.remove('active'); }
-function submitReport(reason) {
-  console.log('Reported:', reason, 'Partner:', state.currentPartner);
-  closeReport();
-  toast('✅ Report sent. Thanks!');
-  endCall();
-}
-
-function openPaywall() { document.getElementById('paywall').classList.add('active'); }
-function closePaywall() { document.getElementById('paywall').classList.remove('active'); }
-
-async function buyPack(hours, bonus) {
-  const phone = state.phone;
-  if (!phone) { toast('Login first'); return; }
-  const amount = hours * 130;
-  toast('📱 Sending M-Pesa request...');
-  try {
-    const res = await fetch('/api/mpesa/topup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, amount })
-    });
-    const data = await res.json();
-    if (data.CheckoutRequestID || data.ResponseCode === '0') {
-      toast('✅ Check your phone for M-Pesa');
-      closePaywall();
-      setTimeout(loadBalance, 15000);
-      setTimeout(loadBalance, 30000);
-    } else {
-      toast('⚠️ Payment failed. Try again.');
-      console.error(data);
-    }
-  } catch (err) { console.error(err); toast('⚠️ Network error'); }
-}
-
-let toastTimer;
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
-}
-
-window.addEventListener('beforeunload', () => {
-  if (state.localStream) state.localStream.getTracks().forEach(t => t.stop());
-});
-</script>
-
-</body>
-  </html>
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('
