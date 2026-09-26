@@ -17,7 +17,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// 🔐 Admin password (must match admin.html)
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'globalcall2026';
 
 function requireAdmin(req, res, next) {
@@ -27,7 +26,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// ===== SMART MATCHING =====
 let waitingUsers = [];
 const socketPhones = {};
 
@@ -81,12 +79,12 @@ io.on('connection', (socket) => {
       socket.join(partner.id);
       io.to(partner.id).emit('match-found', { partnerId: socket.id, initiator: true });
       socket.emit('match-found', { partnerId: partner.id, initiator: false });
-      console.log(`Matched: ${partner.id} <-> ${socket.id}`);
+      console.log('Matched: ' + partner.id + ' <-> ' + socket.id);
     } else {
       waitingUsers = waitingUsers.filter(u => u.id !== socket.id);
       waitingUsers.push(newUser);
       socket.emit('waiting');
-      console.log(`Waiting: ${socket.id} queue=${waitingUsers.length}`);
+      console.log('Waiting: ' + socket.id + ' queue=' + waitingUsers.length);
     }
   });
 
@@ -97,7 +95,6 @@ io.on('connection', (socket) => {
   socket.on('report-user', async ({ reportedSocket, reason }) => {
     const reporterPhone = socketPhones[socket.id];
     const reportedPhone = socketPhones[reportedSocket];
-    console.log(`Report: ${reporterPhone} -> ${reportedPhone || reportedSocket} (${reason})`);
     await supabase.from('reports').insert({
       reporter_phone: reporterPhone || 'unknown',
       reported_phone: reportedPhone || null,
@@ -110,13 +107,11 @@ io.on('connection', (socket) => {
         .select('id')
         .eq('reported_phone', reportedPhone);
       const count = userReports?.length || 0;
-      console.log(`${reportedPhone} now has ${count} reports`);
       if (count >= 3) {
         await supabase.from('bans').insert({
           phone: reportedPhone,
-          reason: `Auto-banned after ${count} reports`
+          reason: 'Auto-banned after ' + count + ' reports'
         });
-        console.log(`BANNED: ${reportedPhone}`);
         io.to(reportedSocket).emit('banned');
       }
     }
@@ -135,11 +130,11 @@ io.on('connection', (socket) => {
 
 async function getMpesaToken() {
   const auth = Buffer.from(
-    `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
+    process.env.MPESA_CONSUMER_KEY + ':' + process.env.MPESA_CONSUMER_SECRET
   ).toString('base64');
   const res = await axios.get(
     'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-    { headers: { Authorization: `Basic ${auth}` } }
+    { headers: { Authorization: 'Basic ' + auth } }
   );
   return res.data.access_token;
 }
@@ -156,7 +151,7 @@ app.post('/api/mpesa/topup', async (req, res) => {
     const eat = new Date(Date.now() + 3 * 60 * 60 * 1000);
     const timestamp = eat.toISOString().replace(/\D/g, '').slice(0, 14);
     const password = Buffer.from(
-      `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
+      process.env.MPESA_SHORTCODE + process.env.MPESA_PASSKEY + timestamp
     ).toString('base64');
     const response = await axios.post(
       'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
@@ -173,7 +168,7 @@ app.post('/api/mpesa/topup', async (req, res) => {
         AccountReference: cleanPhone,
         TransactionDesc: 'GlobalCall credits'
       },
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: { Authorization: 'Bearer ' + token } }
     );
     res.json(response.data);
   } catch (error) {
@@ -259,7 +254,6 @@ app.post('/api/balance/deduct', async (req, res) => {
   }
 });
 
-// ===== APPEALS =====
 app.post('/api/appeal', async (req, res) => {
   try {
     const { phone, message } = req.body;
@@ -278,16 +272,13 @@ app.post('/api/appeal', async (req, res) => {
   }
 });
 
-// ===== ADMIN API =====
 app.get('/api/admin/stats', requireAdmin, async (req, res) => {
   try {
     const { data: users } = await supabase.from('users').select('balance_seconds');
     const { data: reports } = await supabase.from('reports').select('id');
     const { data: bans } = await supabase.from('bans').select('id');
     const { data: appeals } = await supabase.from('appeals').select('status').eq('status', 'pending');
-
     const totalSeconds = (users || []).reduce((sum, u) => sum + (u.balance_seconds || 0), 0);
-
     res.json({
       users: users?.length || 0,
       totalSeconds: totalSeconds,
@@ -296,18 +287,13 @@ app.get('/api/admin/stats', requireAdmin, async (req, res) => {
       pendingAppeals: appeals?.length || 0
     });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'Stats failed' });
   }
 });
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const { data } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(200);
+    const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false }).limit(200);
     res.json(data || []);
   } catch (err) {
     res.status(500).json({ error: 'Users fetch failed' });
@@ -316,11 +302,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 
 app.get('/api/admin/reports', requireAdmin, async (req, res) => {
   try {
-    const { data } = await supabase
-      .from('reports')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(200);
+    const { data } = await supabase.from('reports').select('*').order('created_at', { ascending: false }).limit(200);
     res.json(data || []);
   } catch (err) {
     res.status(500).json({ error: 'Reports fetch failed' });
@@ -329,11 +311,7 @@ app.get('/api/admin/reports', requireAdmin, async (req, res) => {
 
 app.get('/api/admin/appeals', requireAdmin, async (req, res) => {
   try {
-    const { data } = await supabase
-      .from('appeals')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(200);
+    const { data } = await supabase.from('appeals').select('*').order('created_at', { ascending: false }).limit(200);
     res.json(data || []);
   } catch (err) {
     res.status(500).json({ error: 'Appeals fetch failed' });
@@ -342,11 +320,7 @@ app.get('/api/admin/appeals', requireAdmin, async (req, res) => {
 
 app.get('/api/admin/bans', requireAdmin, async (req, res) => {
   try {
-    const { data } = await supabase
-      .from('bans')
-      .select('*')
-      .order('banned_at', { ascending: false })
-      .limit(200);
+    const { data } = await supabase.from('bans').select('*').order('banned_at', { ascending: false }).limit(200);
     res.json(data || []);
   } catch (err) {
     res.status(500).json({ error: 'Bans fetch failed' });
@@ -360,7 +334,6 @@ app.post('/api/admin/unban', requireAdmin, async (req, res) => {
     if (appealId) {
       await supabase.from('appeals').update({ status: 'approved' }).eq('id', appealId);
     }
-    console.log(`UNBANNED: ${phone}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Unban failed' });
@@ -378,4 +351,4 @@ app.post('/api/admin/reject-appeal', requireAdmin, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log('Server running on http://localhost:' + PORT));
